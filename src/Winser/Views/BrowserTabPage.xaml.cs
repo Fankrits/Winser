@@ -50,16 +50,13 @@ public sealed partial class BrowserTabPage : UserControl
     {
         var page = (BrowserTabPage)d;
 
-        if (e.OldValue is BrowserTabViewModel previous)
-        {
-            previous.AddressFocusRequested -= page.OnAddressFocusRequested;
-            previous.PropertyChanged -= page.OnViewModelPropertyChanged;
-        }
+        page.Unsubscribe(e.OldValue as BrowserTabViewModel);
 
-        if (e.NewValue is BrowserTabViewModel current)
+        // Only if already loaded; otherwise OnLoaded does it. Subscribing here unconditionally
+        // would leak a handler on a page that never reaches the tree.
+        if (page.IsLoaded)
         {
-            current.AddressFocusRequested += page.OnAddressFocusRequested;
-            current.PropertyChanged += page.OnViewModelPropertyChanged;
+            page.Subscribe(e.NewValue as BrowserTabViewModel);
         }
 
         // The tab is handed to this control after construction, so the one-time bindings that
@@ -69,6 +66,12 @@ public sealed partial class BrowserTabPage : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // TabView shows the selected tab through a single content presenter, so switching tabs
+        // unloads this page and switching back reloads it. Re-subscribing on every load - not
+        // just when the view model is first handed over - is what keeps Ctrl+L and the find bar
+        // working on a tab the user has left and come back to.
+        Subscribe(ViewModel);
+
         // Every tab's page loads, not just the visible one, so a background new tab must not
         // steal the caret from whatever the user is looking at.
         if (ViewModel is { IsNewTabPage: true } tab && ReferenceEquals(tab.Shell.SelectedTab, tab))
@@ -77,13 +80,32 @@ public sealed partial class BrowserTabPage : UserControl
         }
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs e) => Unsubscribe(ViewModel);
+
+    private void Subscribe(BrowserTabViewModel? tab)
     {
-        if (ViewModel is { } tab)
+        if (tab is null)
         {
-            tab.AddressFocusRequested -= OnAddressFocusRequested;
-            tab.PropertyChanged -= OnViewModelPropertyChanged;
+            return;
         }
+
+        // Detach first so a repeated load cannot double-subscribe.
+        tab.AddressFocusRequested -= OnAddressFocusRequested;
+        tab.PropertyChanged -= OnViewModelPropertyChanged;
+
+        tab.AddressFocusRequested += OnAddressFocusRequested;
+        tab.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    private void Unsubscribe(BrowserTabViewModel? tab)
+    {
+        if (tab is null)
+        {
+            return;
+        }
+
+        tab.AddressFocusRequested -= OnAddressFocusRequested;
+        tab.PropertyChanged -= OnViewModelPropertyChanged;
     }
 
     private void OnAddressFocusRequested(object? sender, EventArgs e) => FocusAddress();

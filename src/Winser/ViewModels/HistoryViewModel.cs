@@ -19,7 +19,7 @@ public sealed class HistoryGroup : List<HistoryEntry>
     public string Key { get; }
 }
 
-public sealed partial class HistoryViewModel : ObservableObject, IDisposable
+public sealed partial class HistoryViewModel : ObservableObject
 {
     private const int MaxResults = 500;
 
@@ -29,11 +29,7 @@ public sealed partial class HistoryViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _isEmpty;
 
-    public HistoryViewModel()
-    {
-        AppServices.History.Changed += OnHistoryChanged;
-        Refresh();
-    }
+    public HistoryViewModel() => Refresh();
 
     public ObservableCollection<HistoryGroup> Groups { get; } = [];
 
@@ -53,7 +49,19 @@ public sealed partial class HistoryViewModel : ObservableObject, IDisposable
 
     public void Remove(HistoryEntry entry) => AppServices.History.Remove(entry);
 
-    public void Dispose() => AppServices.History.Changed -= OnHistoryChanged;
+    /// <summary>
+    /// Starts listening for history changes. Paired with <see cref="Detach"/> on the view's
+    /// load/unload rather than done once in the constructor: TabView unloads a page when the
+    /// user switches tabs, so a one-way teardown would leave the list frozen on return.
+    /// </summary>
+    public void Attach()
+    {
+        AppServices.History.Changed -= OnHistoryChanged;
+        AppServices.History.Changed += OnHistoryChanged;
+        Refresh();
+    }
+
+    public void Detach() => AppServices.History.Changed -= OnHistoryChanged;
 
     [RelayCommand]
     private void ClearAll() => AppServices.History.Clear();

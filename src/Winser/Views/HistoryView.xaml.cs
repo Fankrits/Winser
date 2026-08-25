@@ -21,7 +21,8 @@ public sealed partial class HistoryView : UserControl
         GroupedHistory.Source = ViewModel.Groups;
         HistoryList.ItemsSource = GroupedHistory.View;
 
-        Unloaded += (_, _) => ViewModel.Dispose();
+        Loaded += (_, _) => ViewModel.Attach();
+        Unloaded += (_, _) => ViewModel.Detach();
     }
 
     public HistoryViewModel ViewModel { get; } = new();
