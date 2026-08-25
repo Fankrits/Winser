@@ -1,0 +1,51 @@
+## .NET / Visual Studio
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+ARM64/
+[Bb]uild[Ll]og.*
+*.user
+*.suo
+*.userprefs
+*.cache
+*.log
+*.tlog
+*.binlog
+.vs/
+.vscode/
+!.vscode/extensions.json
+*.appx
+*.appxbundle
+*.appxupload
+*.msix
+*.msixbundle
+*.msixupload
+AppPackages/
+BundleArtifacts/
+GeneratedArtifacts/
+_Pvt_Extensions/
+*.pfx
+*.snk
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## NuGet
+*.nupkg
+packages/
+!packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Local browser profile / scratch data
+UserData/

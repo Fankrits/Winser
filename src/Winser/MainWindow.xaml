@@ -1,0 +1,93 @@
+<Window
+  x:Class="Winser.MainWindow"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:views="using:Winser.Views"
+  xmlns:vm="using:Winser.ViewModels"
+  mc:Ignorable="d">
+
+  <Window.SystemBackdrop>
+    <MicaBackdrop />
+  </Window.SystemBackdrop>
+
+  <Grid x:Name="RootGrid">
+
+    <TabView
+      x:Name="TabStrip"
+      CanDragTabs="True"
+      CanReorderTabs="True"
+      IsAddTabButtonVisible="True"
+      SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=TwoWay}"
+      TabItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
+      TabWidthMode="Equal"
+      AddTabButtonClick="OnAddTabButtonClick"
+      TabCloseRequested="OnTabCloseRequested">
+
+      <!--  Left of the tabs: app mark, plus an InPrivate badge when this window is private.  -->
+      <TabView.TabStripHeader>
+        <StackPanel
+          x:Name="TabStripHeaderPanel"
+          Orientation="Horizontal"
+          Padding="10,0,6,0"
+          Spacing="8"
+          VerticalAlignment="Center">
+          <Image
+            Width="16"
+            Height="16"
+            Source="ms-appx:///Assets/Winser.png"
+            VerticalAlignment="Center" />
+          <Border
+            x:Name="PrivateBadge"
+            Padding="8,2"
+            Background="{ThemeResource WinserPrivateAccentBrush}"
+            CornerRadius="10"
+            Visibility="Collapsed"
+            VerticalAlignment="Center">
+            <TextBlock
+              FontSize="11"
+              FontWeight="SemiBold"
+              Foreground="White"
+              Text="InPrivate" />
+          </Border>
+        </StackPanel>
+      </TabView.TabStripHeader>
+
+      <!--  Right of the tabs: the window drag region. MinWidth keeps tabs clear of the caption buttons.  -->
+      <TabView.TabStripFooter>
+        <Grid
+          x:Name="CustomDragRegion"
+          Background="Transparent"
+          MinWidth="188" />
+      </TabView.TabStripFooter>
+
+      <TabView.TabItemTemplate>
+        <DataTemplate x:DataType="vm:BrowserTabViewModel">
+          <TabViewItem
+            Header="{x:Bind Title, Mode=OneWay}"
+            IconSource="{x:Bind TabIcon, Mode=OneWay}"
+            ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
+
+            <TabViewItem.ContextFlyout>
+              <MenuFlyout>
+                <MenuFlyoutItem Command="{x:Bind DuplicateCommand}" Text="Duplicate tab" />
+                <MenuFlyoutItem Command="{x:Bind ReloadOrStopCommand}" Text="Reload" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Command="{x:Bind CloseOthersCommand}" Text="Close other tabs" />
+                <MenuFlyoutItem Command="{x:Bind CloseToTheRightCommand}" Text="Close tabs to the right" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Command="{x:Bind CloseCommand}" Text="Close tab" />
+              </MenuFlyout>
+            </TabViewItem.ContextFlyout>
+
+            <TabViewItem.Content>
+              <views:BrowserTabPage ViewModel="{x:Bind}" />
+            </TabViewItem.Content>
+          </TabViewItem>
+        </DataTemplate>
+      </TabView.TabItemTemplate>
+    </TabView>
+
+  </Grid>
+</Window>

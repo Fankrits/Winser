@@ -1,0 +1,35 @@
+name: build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.configuration }} x64)
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore src/Winser/Winser.csproj -p:Platform=x64
+
+      - name: Build
+        run: >
+          dotnet build src/Winser/Winser.csproj
+          --no-restore
+          -c ${{ matrix.configuration }}
+          -p:Platform=x64
+          -warnaserror:CS0618,CS8073

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>New tab</title>
+<style>
+  :root {
+    --bg: #fbfbfd;
+    --fg: #1b1b1f;
+    --muted: #5d5d68;
+    --card: #ffffff;
+    --card-hover: #f2f2f6;
+    --stroke: rgba(0, 0, 0, .09);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(0, 0, 0, .06);
+    --accent: #4f46e5;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1f1f22;
+      --fg: #f2f2f5;
+      --muted: #a5a5b0;
+      --card: #2a2a2e;
+      --card-hover: #34343a;
+      --stroke: rgba(255, 255, 255, .08);
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+      --accent: #a5b4fc;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px 72px;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+
+  .brand h1 {
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    margin: 0;
+  }
+
+  form {
+    width: min(560px, 100%);
+    position: relative;
+  }
+
+  input[type="search"] {
+    width: 100%;
+    height: 48px;
+    padding: 0 46px 0 20px;
+    font: inherit;
+    font-size: 15px;
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--stroke);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  input[type="search"]:focus {
+    border-color: var(--accent);
+    box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  input[type="search"]::-webkit-search-cancel-button { display: none; }
+
+  form button {
+    position: absolute;
+    right: 6px;
+    top: 6px;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 18px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+  }
+
+  form button:hover { background: var(--card-hover); color: var(--fg); }
+
+  .tiles {
+    width: min(680px, 100%);
+    margin-top: 36px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 10px;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .tile:hover { background: var(--card-hover); border-color: var(--stroke); }
+
+  .tile .glyph {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: var(--card);
+    border: 1px solid var(--stroke);
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .tile .label {
+    font-size: 12px;
+    color: var(--muted);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hint {
+    margin-top: 28px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .links {
+    position: fixed;
+    bottom: 18px;
+    display: flex;
+    gap: 4px;
+  }
+
+  .links button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .links button:hover { background: var(--card-hover); color: var(--fg); }
+</style>
+</head>
+<body>
+
+  <div class="brand">
+    <svg width="44" height="44" viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#6366f1"/>
+          <stop offset="1" stop-color="#22d3ee"/>
+        </linearGradient>
+      </defs>
+      <rect x="2" y="2" width="96" height="96" rx="26" fill="url(#g)"/>
+      <path d="M20 27 L34 75 L50 46 L66 75 L80 27"
+            fill="none" stroke="#fff" stroke-width="11"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>Winser</h1>
+  </div>
+
+  <form id="search" autocomplete="off">
+    <input id="q" type="search" placeholder="Search or enter web address" aria-label="Search or enter web address">
+    <button type="submit" aria-label="Go">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/>
+      </svg>
+    </button>
+  </form>
+
+  <div class="tiles" id="tiles" hidden></div>
+  <p class="hint" id="hint">Sites you visit most will show up here.</p>
+
+  <nav class="links">
+    <button data-page="winser://bookmarks">Bookmarks</button>
+    <button data-page="winser://history">History</button>
+    <button data-page="winser://downloads">Downloads</button>
+    <button data-page="winser://settings">Settings</button>
+  </nav>
+
+<script>
+  const host = window.chrome && window.chrome.webview;
+
+  function send(type, url) {
+    if (!host) { return; }
+    host.postMessage(JSON.stringify({ t: type, url }));
+  }
+
+  document.getElementById('search').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const value = document.getElementById('q').value.trim();
+    if (value) { send('navigate', value); }
+  });
+
+  for (const button of document.querySelectorAll('.links button')) {
+    button.addEventListener('click', () => send('navigate', button.dataset.page));
+  }
+
+  function hostOf(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  }
+
+  // Called by the shell once the page has loaded; see WebContentView.PushTopSitesAsync.
+  window.__winserTopSites = (sites) => {
+    const container = document.getElementById('tiles');
+    container.textContent = '';
+
+    if (!Array.isArray(sites) || sites.length === 0) {
+      container.hidden = true;
+      return;
+    }
+
+    for (const site of sites) {
+      const name = hostOf(site.url);
+      const tile = document.createElement('button');
+      tile.className = 'tile';
+      tile.type = 'button';
+      tile.title = site.title ? site.title + '\n' + site.url : site.url;
+
+      const glyph = document.createElement('span');
+      glyph.className = 'glyph';
+      glyph.textContent = (name[0] || '?').toUpperCase();
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = site.title || name;
+
+      tile.append(glyph, label);
+      tile.addEventListener('click', (e) => send(e.ctrlKey ? 'newtab' : 'navigate', site.url));
+      tile.addEventListener('auxclick', (e) => {
+        if (e.button === 1) { e.preventDefault(); send('newtab', site.url); }
+      });
+      container.append(tile);
+    }
+
+    container.hidden = false;
+    document.getElementById('hint').hidden = true;
+  };
+</script>
+</body>
+</html>

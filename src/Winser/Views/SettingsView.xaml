@@ -1,0 +1,345 @@
+<UserControl
+  x:Class="Winser.Views.SettingsView"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:models="using:Winser.Models"
+  mc:Ignorable="d">
+
+  <Grid Background="{ThemeResource WinserContentBackgroundBrush}">
+    <ScrollViewer Padding="0,0,0,48">
+      <StackPanel
+        MaxWidth="820"
+        Margin="32,28,32,0"
+        HorizontalAlignment="Stretch">
+
+        <TextBlock Style="{StaticResource PageHeaderTextStyle}" Text="Settings" />
+        <TextBlock Opacity="0.65" Text="Changes are saved as you make them." />
+
+        <!--  Appearance  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Appearance" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Theme" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Applies to Winser's chrome and to pages that support colour schemes." />
+            </StackPanel>
+            <ComboBox
+              Grid.Column="1"
+              MinWidth="200"
+              ItemsSource="{x:Bind ViewModel.ThemeOptions}"
+              SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Show the bookmarks bar" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Ctrl+Shift+B toggles it too." />
+            </StackPanel>
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.ShowBookmarksBar, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Default page zoom" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Applied to new tabs. Ctrl+0 resets a single tab." />
+            </StackPanel>
+            <NumberBox
+              Grid.Column="1"
+              Width="140"
+              LargeChange="25"
+              Maximum="500"
+              Minimum="25"
+              SmallChange="10"
+              SpinButtonPlacementMode="Compact"
+              Value="{x:Bind ViewModel.DefaultZoomPercent, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!--  Startup and search  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="On startup" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="When Winser opens" VerticalAlignment="Center" />
+            <ComboBox
+              Grid.Column="1"
+              MinWidth="240"
+              ItemsSource="{x:Bind ViewModel.StartupOptions}"
+              SelectedIndex="{x:Bind ViewModel.StartupIndex, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Home page" />
+            <Grid ColumnSpacing="8">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBox
+                PlaceholderText="https://example.com"
+                Text="{x:Bind ViewModel.HomePage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+              <Button
+                Grid.Column="1"
+                Command="{x:Bind ViewModel.UseNewTabAsHomePageCommand}"
+                Content="Use new tab page" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Search" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Search engine used in the address bar" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Anything that is not an address becomes a search." />
+            </StackPanel>
+            <ComboBox
+              Grid.Column="1"
+              MinWidth="200"
+              DisplayMemberPath="Name"
+              ItemsSource="{x:Bind ViewModel.SearchEngines}"
+              SelectedIndex="{x:Bind ViewModel.SearchEngineIndex, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!--  Privacy  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Privacy" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Tracking prevention" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Blocks known trackers. Strict can break sign-ins on some sites." />
+            </StackPanel>
+            <ComboBox
+              Grid.Column="1"
+              MinWidth="200"
+              ItemsSource="{x:Bind ViewModel.TrackingOptions}"
+              SelectedIndex="{x:Bind ViewModel.TrackingIndex, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Keep history for" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Days. Older entries are dropped at startup. Set to 0 to keep everything." />
+            </StackPanel>
+            <NumberBox
+              Grid.Column="1"
+              Width="140"
+              Maximum="3650"
+              Minimum="0"
+              SpinButtonPlacementMode="Compact"
+              Value="{x:Bind ViewModel.HistoryRetentionDays, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Clear browsing history when Winser closes" VerticalAlignment="Center" />
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.ClearHistoryOnExit, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Clear browsing data now" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Cookies, cache and site data for every site." />
+            </StackPanel>
+            <Button
+              Grid.Column="1"
+              Click="OnClearBrowsingData"
+              Content="Clear data"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!--  Downloads  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Downloads" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Save files to" />
+            <Grid ColumnSpacing="8">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBox IsReadOnly="True" Text="{x:Bind ViewModel.DownloadFolder, Mode=OneWay}" />
+              <Button Grid.Column="1" Click="OnChooseDownloadFolder" Content="Change" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Ask where to save each file" VerticalAlignment="Center" />
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.AskWhereToSaveDownloads, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!--  Site behaviour  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Sites and content" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Open pop-up windows as tabs" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Keeps everything a site opens inside this window." />
+            </StackPanel>
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.OpenPopupsAsTabs, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Run JavaScript" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Takes effect in tabs opened after the change." />
+            </StackPanel>
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.EnableJavaScript, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Enable developer tools" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="F12 opens the DevTools window for the active tab." />
+            </StackPanel>
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.EnableDevTools, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!--  About  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="About Winser" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <StackPanel Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+              <Image Width="40" Height="40" Source="ms-appx:///Assets/Winser.png" />
+              <StackPanel VerticalAlignment="Center">
+                <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Winser" />
+                <TextBlock Opacity="0.7" Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind ViewModel.AppVersion}" />
+              </StackPanel>
+            </StackPanel>
+            <TextBlock
+              Opacity="0.75"
+              Style="{StaticResource CaptionTextBlockStyle}"
+              Text="{x:Bind ViewModel.RuntimeDescription}"
+              TextWrapping="Wrap" />
+            <Grid ColumnSpacing="8">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <TextBlock
+                Opacity="0.6"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind ViewModel.DataFolder}"
+                TextTrimming="CharacterEllipsis"
+                VerticalAlignment="Center" />
+              <Button
+                Grid.Column="1"
+                Command="{x:Bind ViewModel.OpenDataFolderCommand}"
+                Content="Open data folder" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

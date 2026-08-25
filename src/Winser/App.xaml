@@ -1,0 +1,104 @@
+<Application
+  x:Class="Winser.App"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:conv="using:Winser.Converters">
+
+  <Application.Resources>
+    <ResourceDictionary>
+
+      <ResourceDictionary.MergedDictionaries>
+        <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Light">
+          <!--  Browser chrome sits over Mica, so the chrome fills are translucent on purpose.  -->
+          <SolidColorBrush x:Key="WinserChromeBrush" Color="#FFFFFF" Opacity="0.55" />
+          <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="#000000" Opacity="0.09" />
+          <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="#4F46E5" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="WinserChromeBrush" Color="#1C1C1C" Opacity="0.55" />
+          <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="#FFFFFF" Opacity="0.09" />
+          <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="#202020" />
+          <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="#4F46E5" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="HighContrast">
+          <SolidColorBrush x:Key="WinserChromeBrush" Color="{ThemeResource SystemColorWindowColor}" />
+          <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+          <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+          <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+        </ResourceDictionary>
+
+      </ResourceDictionary.ThemeDictionaries>
+
+      <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+      <conv:EmptyToVisibilityConverter x:Key="EmptyToVisibility" />
+      <conv:RelativeTimeConverter x:Key="RelativeTime" />
+
+      <!--  A flat icon button for the toolbar; hover and pressed keep the system fills.  -->
+      <Style x:Key="ToolbarIconButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinWidth" Value="34" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="FontFamily" Value="{ThemeResource SymbolThemeFontFamily}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+      </Style>
+
+      <Style x:Key="ToolbarToggleButtonStyle" TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="MinWidth" Value="34" />
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="FontSize" Value="13" />
+      </Style>
+
+      <!--  Bookmarks bar entries: icon and short label, no chrome until hovered.  -->
+      <Style x:Key="BookmarkBarButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+      </Style>
+
+      <Style x:Key="SettingsCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="16,12" />
+      </Style>
+
+      <Style x:Key="PageHeaderTextStyle" TargetType="TextBlock" BasedOn="{StaticResource TitleTextBlockStyle}">
+        <Setter Property="Margin" Value="0,0,0,4" />
+      </Style>
+
+      <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="Margin" Value="0,24,0,8" />
+      </Style>
+
+    </ResourceDictionary>
+  </Application.Resources>
+
+</Application>
