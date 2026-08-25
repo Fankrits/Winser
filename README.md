@@ -72,24 +72,35 @@ back to the shell and leaves editing shortcuts alone.
 ## Requirements
 
 - Windows 10 version 1809 (17763) or later — Windows 11 recommended for Mica
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) — pinned in `global.json`,
-  because Windows App SDK 1.6's MRT/PRI build tasks are not present in the newer SDK layouts
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) — pinned in `global.json` for
+  consistent restore/tooling behavior across machines
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
   — preinstalled on Windows 11 and on up-to-date Windows 10
-- Visual Studio 2022 (17.8+) with the *.NET Desktop Development* workload, or the standalone
-  [Build Tools](https://visualstudio.microsoft.com/downloads/). WinUI 3 compiles its XAML into
-  a `resources.pri`, and the MRT build tasks that produce it ship with Visual Studio's MSBuild,
-  not with the .NET SDK — so `dotnet build` alone is not enough.
+
+Visual Studio is *not* required. WinUI 3 compiles its XAML into a `resources.pri` via MRT/PRI
+build tasks that normally ship only with Visual Studio's MSBuild, not the .NET SDK — a known,
+unresolved gap for plain `dotnet build`
+([microsoft/WindowsAppSDK#3939](https://github.com/microsoft/WindowsAppSDK/issues/3939),
+[#4889](https://github.com/microsoft/WindowsAppSDK/issues/4889)). The project sets
+`EnableMsixTooling` to route around it, confirmed working in CI (see `.github/workflows/build.yml`'s
+`dotnet-build` job) — so `dotnet build`/`dotnet run` work directly with just the SDK above.
+If you'd still rather use Visual Studio 2022 (17.8+, *.NET Desktop Development* workload) or the
+standalone [Build Tools](https://visualstudio.microsoft.com/downloads/) with `msbuild`, both keep
+working too; CI builds with `msbuild` as the primary, most-tested path.
 
 ## Build and run
-
-Open `Winser.sln` in Visual Studio, pick the `x64` platform, and press F5.
-
-From a Developer PowerShell:
 
 ```powershell
 git clone https://github.com/Fankrits/Winser.git
 cd Winser
+dotnet build src/Winser/Winser.csproj -c Release -p:Platform=x64
+dotnet run  --project src/Winser/Winser.csproj -c Release -p:Platform=x64
+```
+
+Or open `Winser.sln` in Visual Studio, pick the `x64` platform, and press F5. Or, from a
+Developer PowerShell:
+
+```powershell
 msbuild Winser.sln -t:Restore -p:Configuration=Release -p:Platform=x64
 msbuild Winser.sln -p:Configuration=Release -p:Platform=x64
 .\src\Winser\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\Winser.exe

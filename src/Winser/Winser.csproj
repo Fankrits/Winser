@@ -37,14 +37,12 @@
     <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
 
     <!--
-      Attempted workaround for `dotnet build` failing with MSB4062 on
-      Microsoft.Build.Packaging.Pri.Tasks.ExpandPriContent (the PRI/MRT resource-indexing task
-      is not part of the .NET SDK's MSBuild, only Visual Studio's - see microsoft/WindowsAppSDK
-      issues #3939, #4889, #3548). Unverified: this unblocked one unpackaged app in a GitHub
-      issue with the same WindowsPackageType=None shape as this project, but Microsoft's own
-      tracker and the Uno Platform maintainers both describe this as an unresolved, structural
-      limitation with no general fix - so `msbuild` (see README) remains the supported path
-      regardless of what this property does here.
+      Without this, `dotnet build` fails with MSB4062 trying to load
+      Microsoft.Build.Packaging.Pri.Tasks.ExpandPriContent - that PRI/MRT resource-indexing task
+      normally ships only with Visual Studio's MSBuild, not the .NET SDK's (a known, unresolved
+      WindowsAppSDK gap: see issues #3939, #4889, #3548). Confirmed fixed for this project's
+      unpackaged (WindowsPackageType=None) shape by CI's dotnet-build job in
+      .github/workflows/build.yml, which builds with plain `dotnet build` on every push.
     -->
     <EnableMsixTooling>true</EnableMsixTooling>
   </PropertyGroup>

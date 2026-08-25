@@ -23,8 +23,10 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
-      # WinUI 3 needs the MRT/PRI build tasks, which ship with Visual Studio's MSBuild
-      # rather than the .NET SDK, so `dotnet build` cannot produce resources.pri on its own.
+      # WinUI 3's MRT/PRI build tasks normally ship with Visual Studio's MSBuild rather than
+      # the .NET SDK. EnableMsixTooling (in Winser.csproj) routes around that for plain
+      # `dotnet build` too - see dotnet-build below - but msbuild stays the primary, most-tested
+      # path, matching what Visual Studio itself uses.
       - uses: microsoft/setup-msbuild@v2
 
       - name: Restore
@@ -42,13 +44,12 @@ jobs:
           -p:Platform=x64
           -m
 
-  # Informational only: checks whether EnableMsixTooling unblocks `dotnet build` directly
-  # (see the property's comment in Winser.csproj). continue-on-error keeps a "no" here from
-  # failing the workflow - the msbuild job above is the one that gates CI either way.
-  probe-dotnet-build:
-    name: Probe - does dotnet build work now?
+  # Confirms the plain `dotnet build` / `dotnet run` path from the README keeps working.
+  # EnableMsixTooling (in Winser.csproj) is what unblocks it; this gates on that staying true
+  # rather than just hoping a future dependency bump doesn't quietly break it again.
+  dotnet-build:
+    name: Build (dotnet CLI, Release x64)
     runs-on: windows-latest
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
