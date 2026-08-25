@@ -184,10 +184,32 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     // ------------------------------------------------------------------- appearance
 
-    private double TabStripHeight =>
-        Application.Current.Resources.TryGetValue("TabViewItemHeight", out var value) && value is double height
-            ? height
-            : 40;
+    /// <summary>
+    /// Fallback used only before the first layout pass has measured the real strip height.
+    /// </summary>
+    private const double FallbackTabStripHeight = 40;
+
+    private double _measuredTabStripHeight;
+
+    /// <summary>
+    /// The tab strip's rendered height, used to slide it off-screen in full screen (see
+    /// <see cref="SetFullScreen"/>). <see cref="CustomDragRegion"/> is the TabView's
+    /// TabStripFooter, which the control renders inline in the same row as the tab headers, so
+    /// its ActualHeight after layout is the real strip height — measuring it beats guessing at
+    /// an internal theme resource key that may not exist or may not match.
+    /// </summary>
+    private double TabStripHeight
+    {
+        get
+        {
+            if (CustomDragRegion.ActualHeight > 0)
+            {
+                _measuredTabStripHeight = CustomDragRegion.ActualHeight;
+            }
+
+            return _measuredTabStripHeight > 0 ? _measuredTabStripHeight : FallbackTabStripHeight;
+        }
+    }
 
     private void ApplyTheme() =>
         ThemeHelper.Apply(RootGrid, AppWindow, AppServices.Settings.Current.Theme);

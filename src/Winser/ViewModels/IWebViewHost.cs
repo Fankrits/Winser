@@ -33,6 +33,12 @@ public interface IWebViewHost
     /// <summary>Re-reads app settings that map onto CoreWebView2 options.</summary>
     void ApplyPreferences();
 
+    /// <summary>
+    /// Tells the page's injected script whether Winser itself is in full screen, so Escape
+    /// can exit it even while the page has keyboard focus. See Scripts.ShortcutBridge.
+    /// </summary>
+    void SyncFullScreenFlag(bool isFullScreen);
+
     /// <summary>Clears cookies, cache and site data for the whole profile this tab uses.</summary>
     Task ClearBrowsingDataAsync();
 

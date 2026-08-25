@@ -311,6 +311,20 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         }
     }
 
+    /// <summary>
+    /// Each navigation gets a brand-new JS global scope, so this is re-asserted on every
+    /// NavigationCompleted as well as whenever the window's full-screen state actually changes.
+    /// </summary>
+    public void SyncFullScreenFlag(bool isFullScreen)
+    {
+        if (_core is null)
+        {
+            return;
+        }
+
+        _ = ExecuteScriptAsync($"window.__winserFullScreen = {(isFullScreen ? "true" : "false")}");
+    }
+
     private void Hook(CoreWebView2 core)
     {
         core.NavigationStarting += OnNavigationStarting;
@@ -368,6 +382,11 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     private void OnNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         Tab?.ReportNavigationCompleted(e.IsSuccess, e.IsSuccess ? null : Describe(e.WebErrorStatus));
+
+        if (Tab is { } tab)
+        {
+            SyncFullScreenFlag(tab.Shell.IsFullScreen);
+        }
 
         if (e.IsSuccess && InternalPages.IsNewTab(sender.Source))
         {

@@ -146,18 +146,35 @@ public static class Scripts
           if (window.__winserKeys) { return; }
           window.__winserKeys = true;
 
+          // Re-asserted by the shell on every navigation and full-screen toggle, since a fresh
+          // document gets a fresh global scope; see WebContentView.SyncFullScreenFlag.
+          if (typeof window.__winserFullScreen === 'undefined') { window.__winserFullScreen = false; }
+
           const OWNED = new Set(['t', 'w', 'n', 'l', 'd', 'f', 'h', 'j', 'o', 'p', 'r', 'b',
                                  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
                                  '+', '-', '=', '_']);
-          const NAMED = new Set(['Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'Escape']);
+          const NAMED = new Set(['Tab', 'ArrowLeft', 'ArrowRight', 'Home']);
 
           addEventListener('keydown', (e) => {
+            // Escape is handled on its own: forwarding it unconditionally would swallow every
+            // page's own use of it (closing a modal, a dropdown, ...), so it only ever leaves
+            // the page when Winser is actually in full screen - matching how Escape universally
+            // exits full screen in every other browser, page handling or not.
+            if (e.key === 'Escape') {
+              if (!window.__winserFullScreen) { return; }
+              window.chrome.webview.postMessage(JSON.stringify({
+                t: 'key', key: 'Escape', ctrl: false, shift: false, alt: false,
+              }));
+              e.preventDefault();
+              e.stopPropagation();
+              return;
+            }
+
             const fn = /^F([1-9]|1[0-2])$/.test(e.key);
             if (!fn && !e.ctrlKey && !e.altKey) { return; }
 
             const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
             if (!fn && !OWNED.has(key) && !NAMED.has(key)) { return; }
-            if (key === 'Escape' && !e.ctrlKey && !e.altKey) { return; }
 
             window.chrome.webview.postMessage(JSON.stringify({
               t: 'key', key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey,

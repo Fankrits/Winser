@@ -88,6 +88,14 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     public void AttachWindow(IShellWindow window) => _window = window;
 
+    partial void OnIsFullScreenChanged(bool value)
+    {
+        foreach (var tab in Tabs)
+        {
+            tab.SyncFullScreenFlag();
+        }
+    }
+
     /// <summary>The owning window's HWND, for WinRT pickers that need an owner.</summary>
     public nint WindowHandle => _window?.WindowHandle ?? IntPtr.Zero;
 

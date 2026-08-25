@@ -229,6 +229,8 @@ public sealed partial class BrowserTabViewModel : ObservableObject
             PendingUrl = null;
             host.Navigate(pending);
         }
+
+        host.SyncFullScreenFlag(_shell.IsFullScreen);
     }
 
     public void DetachHost()
@@ -241,6 +243,9 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     /// <summary>Pushes changed settings (theme, tracking prevention, ...) into a live page.</summary>
     public void ApplyPreferences() => _host?.ApplyPreferences();
+
+    /// <summary>Pushes the window's full-screen state into this tab's page. See IWebViewHost.</summary>
+    public void SyncFullScreenFlag() => _host?.SyncFullScreenFlag(_shell.IsFullScreen);
 
     /// <summary>Clears site data through this tab's browser, if it has one yet.</summary>
     public async Task<bool> TryClearBrowsingDataAsync()
