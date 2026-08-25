@@ -20,7 +20,8 @@ WinUI 3 desktop app. Page rendering is handled by the Microsoft Edge WebView2 ru
   and close-to-the-right
 - Omnibox that decides between navigating and searching, with suggestions from history and
   bookmarks, and six switchable search engines
-- Back / forward / reload / stop / home, per-tab zoom with a zoom chip in the toolbar
+- Back / forward / reload / stop / home, and per-tab zoom (menu, keyboard or Ctrl+scroll)
+  with a zoom chip in the toolbar
 - Per-tab audio indicator and mute
 - Link preview in the bottom-left corner, like every other browser
 - Session restore, with window placement remembered
@@ -71,7 +72,8 @@ back to the shell and leaves editing shortcuts alone.
 ## Requirements
 
 - Windows 10 version 1809 (17763) or later — Windows 11 recommended for Mica
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) — pinned in `global.json`,
+  because Windows App SDK 1.6's MRT/PRI build tasks are not present in the newer SDK layouts
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
   — preinstalled on Windows 11 and on up-to-date Windows 10
 - Visual Studio 2022 (17.8+) with the *.NET Desktop Development* workload, if you want the
@@ -154,6 +156,10 @@ WebView2 alive, so a detour through `winser://settings` does not throw away back
   because Winser handles `NewWindowRequested` itself rather than parenting a second WebView2.
 - Find on page needs the CSS Custom Highlight API. Every current Chromium build has it; the find
   bar says so when a page does not.
+- The WinUI 3 WebView2 element exposes no `CoreWebView2Controller`, so there is no real
+  `ZoomFactor` to set. Zoom is emulated with the CSS `zoom` property on the document element,
+  reapplied on every `DOMContentLoaded`. It reflows pages the way browser zoom does, but it does
+  not reach into cross-origin iframes, and a page that sets `zoom` on `<html>` itself wins.
 - Tab drag-and-drop between windows is not implemented — reordering within a window is.
 - Only the empty strip to the right of the tabs is a window drag region, which is the limit of
   what `Window.SetTitleBar` accepts.

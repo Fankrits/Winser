@@ -309,8 +309,9 @@
               Command="{x:Bind ViewModel.Shell.OpenDownloadsCommand}"
               KeyboardAcceleratorTextOverride="Ctrl+J"
               Text="Downloads" />
-            <MenuFlyoutItem
+            <ToggleMenuFlyoutItem
               Command="{x:Bind ViewModel.Shell.ToggleBookmarksBarCommand}"
+              IsChecked="{x:Bind ViewModel.Shell.ShowBookmarksBar, Mode=OneWay}"
               KeyboardAcceleratorTextOverride="Ctrl+Shift+B"
               Text="Show bookmarks bar" />
 

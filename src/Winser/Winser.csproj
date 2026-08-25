@@ -18,6 +18,13 @@
     <DefaultLanguage>en-US</DefaultLanguage>
 
     <!--
+      MVVMTK0045: [ObservableProperty] on a field is flagged as not AOT-safe in WinRT scenarios;
+      the suggested fix is a partial property, which needs C# 13 and so a net9.0+ target. Winser
+      targets net8.0 and is not published AOT, so the fields stay and the notice is muted.
+    -->
+    <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
+
+    <!--
       Winser ships as an unpackaged (plain .exe) desktop app so it can be xcopy-deployed
       and launched without an MSIX identity. Self-containing the Windows App SDK removes
       the "install the WindowsAppRuntime first" step for end users.
