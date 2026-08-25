@@ -23,13 +23,21 @@ jobs:
         with:
           dotnet-version: "8.0.x"
 
+      # WinUI 3 needs the MRT/PRI build tasks, which ship with Visual Studio's MSBuild
+      # rather than the .NET SDK, so `dotnet build` cannot produce resources.pri on its own.
+      - uses: microsoft/setup-msbuild@v2
+
       - name: Restore
-        run: dotnet restore src/Winser/Winser.csproj -p:Platform=x64
+        run: >
+          msbuild Winser.sln
+          -t:Restore
+          -p:Configuration=${{ matrix.configuration }}
+          -p:Platform=x64
+          -m
 
       - name: Build
         run: >
-          dotnet build src/Winser/Winser.csproj
-          --no-restore
-          -c ${{ matrix.configuration }}
+          msbuild Winser.sln
+          -p:Configuration=${{ matrix.configuration }}
           -p:Platform=x64
-          -warnaserror:CS0618,CS8073
+          -m

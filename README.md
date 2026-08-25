@@ -76,19 +76,24 @@ back to the shell and leaves editing shortcuts alone.
   because Windows App SDK 1.6's MRT/PRI build tasks are not present in the newer SDK layouts
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
   — preinstalled on Windows 11 and on up-to-date Windows 10
-- Visual Studio 2022 (17.8+) with the *.NET Desktop Development* workload, if you want the
-  designer and debugger. The command line alone is enough to build.
+- Visual Studio 2022 (17.8+) with the *.NET Desktop Development* workload, or the standalone
+  [Build Tools](https://visualstudio.microsoft.com/downloads/). WinUI 3 compiles its XAML into
+  a `resources.pri`, and the MRT build tasks that produce it ship with Visual Studio's MSBuild,
+  not with the .NET SDK — so `dotnet build` alone is not enough.
 
 ## Build and run
+
+Open `Winser.sln` in Visual Studio, pick the `x64` platform, and press F5.
+
+From a Developer PowerShell:
 
 ```powershell
 git clone https://github.com/Fankrits/Winser.git
 cd Winser
-dotnet build src/Winser/Winser.csproj -c Release -p:Platform=x64
-dotnet run  --project src/Winser/Winser.csproj -c Release -p:Platform=x64
+msbuild Winser.sln -t:Restore -p:Configuration=Release -p:Platform=x64
+msbuild Winser.sln -p:Configuration=Release -p:Platform=x64
+.\src\Winser\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\Winser.exe
 ```
-
-Or open `Winser.sln` in Visual Studio, pick the `x64` platform, and press F5.
 
 Winser builds **unpackaged and self-contained**: the output is a plain `Winser.exe` that carries
 its own copy of .NET and the Windows App SDK, so it runs without installing a runtime first.

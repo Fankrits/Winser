@@ -30,6 +30,9 @@ public interface IWebViewHost
 
     Task<string> ExecuteScriptAsync(string script);
 
+    /// <summary>Re-reads app settings that map onto CoreWebView2 options.</summary>
+    void ApplyPreferences();
+
     /// <summary>Clears cookies, cache and site data for the whole profile this tab uses.</summary>
     Task ClearBrowsingDataAsync();
 

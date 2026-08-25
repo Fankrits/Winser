@@ -239,6 +239,9 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     public void RequestAddressFocus() => AddressFocusRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Pushes changed settings (theme, tracking prevention, ...) into a live page.</summary>
+    public void ApplyPreferences() => _host?.ApplyPreferences();
+
     /// <summary>Clears site data through this tab's browser, if it has one yet.</summary>
     public async Task<bool> TryClearBrowsingDataAsync()
     {

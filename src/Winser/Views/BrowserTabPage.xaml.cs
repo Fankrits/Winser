@@ -69,7 +69,9 @@ public sealed partial class BrowserTabPage : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (ViewModel is { IsNewTabPage: true })
+        // Every tab's page loads, not just the visible one, so a background new tab must not
+        // steal the caret from whatever the user is looking at.
+        if (ViewModel is { IsNewTabPage: true } tab && ReferenceEquals(tab.Shell.SelectedTab, tab))
         {
             FocusAddress();
         }

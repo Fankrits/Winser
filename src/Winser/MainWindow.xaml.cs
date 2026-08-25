@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -34,7 +35,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         WindowManager.Register(this);
 
         Title = ViewModel.WindowTitle;
-        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Winser.ico"));
+        TrySetWindowIcon();
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(CustomDragRegion);
@@ -116,6 +117,19 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         ViewModel.Detach();
         WindowManager.Unregister(this);
+    }
+
+    /// <summary>A missing or unreadable icon file is not worth failing a window over.</summary>
+    private void TrySetWindowIcon()
+    {
+        try
+        {
+            AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Winser.ico"));
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine($"[Winser] Window icon could not be set: {ex.Message}");
+        }
     }
 
     private void RestorePlacement()

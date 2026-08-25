@@ -241,12 +241,8 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         Tab?.AttachHost(this);
     }
 
-    private static async Task ConfigureAsync(CoreWebView2 core)
+    private async Task ConfigureAsync(CoreWebView2 core)
     {
-        var settings = AppServices.Settings.Current;
-
-        core.Settings.AreDevToolsEnabled = settings.EnableDevTools;
-        core.Settings.IsScriptEnabled = settings.EnableJavaScript;
         core.Settings.AreDefaultContextMenusEnabled = true;
         core.Settings.AreDefaultScriptDialogsEnabled = true;
         core.Settings.IsSwipeNavigationEnabled = true;
@@ -256,6 +252,37 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.Settings.IsPinchZoomEnabled = false;
         // Winser draws its own link preview, so the built-in one would just double up.
         core.Settings.IsStatusBarEnabled = false;
+
+        ApplyPreferences();
+
+        // Serves Assets\Web (the new tab page) from https://assets.winser/ so it runs on a
+        // normal secure origin instead of file://.
+        if (Directory.Exists(AppPaths.WebAssets))
+        {
+            core.SetVirtualHostNameToFolderMapping(
+                InternalPages.VirtualHost,
+                AppPaths.WebAssets,
+                CoreWebView2HostResourceAccessKind.Allow);
+        }
+
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(Scripts.FindInPage);
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(Scripts.ShortcutBridge);
+    }
+
+    /// <summary>
+    /// Applies every setting that maps onto a CoreWebView2 option, so a change in
+    /// <c>winser://settings</c> reaches pages that are already open.
+    /// </summary>
+    public void ApplyPreferences()
+    {
+        if (_core is not { } core)
+        {
+            return;
+        }
+
+        var settings = AppServices.Settings.Current;
+        core.Settings.AreDevToolsEnabled = settings.EnableDevTools;
+        core.Settings.IsScriptEnabled = settings.EnableJavaScript;
 
         try
         {
@@ -272,27 +299,16 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
                 TrackingPrevention.Strict => CoreWebView2TrackingPreventionLevel.Strict,
                 _ => CoreWebView2TrackingPreventionLevel.Balanced,
             };
+
             var downloadFolder = AppServices.Settings.EffectiveDownloadFolder;
             Directory.CreateDirectory(downloadFolder);
             core.Profile.DefaultDownloadFolderPath = downloadFolder;
         }
-        catch (Exception ex) when (ex is NotImplementedException or ArgumentException or UnauthorizedAccessException or IOException)
+        catch (Exception ex) when (ex is NotImplementedException or ArgumentException
+                                      or UnauthorizedAccessException or IOException)
         {
             Debug.WriteLine($"[Winser] Profile setting unavailable on this runtime: {ex.Message}");
         }
-
-        // Serves Assets\Web (the new tab page) from https://assets.winser/ so it runs on a
-        // normal secure origin instead of file://.
-        if (Directory.Exists(AppPaths.WebAssets))
-        {
-            core.SetVirtualHostNameToFolderMapping(
-                InternalPages.VirtualHost,
-                AppPaths.WebAssets,
-                CoreWebView2HostResourceAccessKind.Allow);
-        }
-
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(Scripts.FindInPage);
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(Scripts.ShortcutBridge);
     }
 
     private void Hook(CoreWebView2 core)

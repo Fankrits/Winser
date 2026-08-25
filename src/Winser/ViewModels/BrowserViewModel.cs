@@ -37,16 +37,15 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
+    [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
     private bool _isFullScreen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
     private bool _showBookmarksBar;
 
     [ObservableProperty]
     private bool _hasActiveDownloads;
-
-    [ObservableProperty]
-    private bool _isDownloadsFlyoutOpen;
 
     public BrowserViewModel(bool isPrivate)
     {
@@ -79,6 +78,9 @@ public sealed partial class BrowserViewModel : ObservableObject
     public bool CanReopenClosedTab => _closedTabs.Count > 0;
 
     public string WindowTitle => IsPrivate ? "Winser — InPrivate" : "Winser";
+
+    /// <summary>Full screen hides all chrome, the bookmarks bar included.</summary>
+    public bool IsBookmarksBarVisible => ShowBookmarksBar && !IsFullScreen;
 
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
@@ -536,6 +538,11 @@ public sealed partial class BrowserViewModel : ObservableObject
         {
             ShowBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar;
         }
+
+        foreach (var tab in Tabs)
+        {
+            tab.ApplyPreferences();
+        }
     }
 
     private void OnBookmarksChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -576,11 +583,7 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
-    private void OnDownloadStarted(object? sender, DownloadItem e)
-    {
-        HasActiveDownloads = true;
-        IsDownloadsFlyoutOpen = true;
-    }
+    private void OnDownloadStarted(object? sender, DownloadItem e) => HasActiveDownloads = true;
 
     private void RebuildBookmarkBar()
     {

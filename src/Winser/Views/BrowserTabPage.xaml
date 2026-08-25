@@ -175,8 +175,8 @@
         Style="{StaticResource ToolbarIconButtonStyle}"
         ToolTipService.ToolTip="{x:Bind ViewModel.BookmarkTooltip, Mode=OneWay}" />
 
+      <Grid Grid.Column="9">
       <Button
-        Grid.Column="9"
         AutomationProperties.Name="Downloads"
         Content="&#xE896;"
         Style="{StaticResource ToolbarIconButtonStyle}"
@@ -233,6 +233,16 @@
           </Flyout>
         </Button.Flyout>
       </Button>
+        <Ellipse
+          Width="7"
+          Height="7"
+          Margin="0,5,4,0"
+          Fill="{ThemeResource AccentFillColorDefaultBrush}"
+          HorizontalAlignment="Right"
+          IsHitTestVisible="False"
+          VerticalAlignment="Top"
+          Visibility="{x:Bind ViewModel.Shell.HasActiveDownloads, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+      </Grid>
 
       <Button
         Grid.Column="10"
@@ -346,7 +356,7 @@
       Background="{ThemeResource WinserChromeBrush}"
       BorderBrush="{ThemeResource WinserChromeBorderBrush}"
       BorderThickness="0,0,0,1"
-      Visibility="{x:Bind ViewModel.Shell.ShowBookmarksBar, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+      Visibility="{x:Bind ViewModel.Shell.IsBookmarksBarVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
       <ScrollViewer
         HorizontalScrollBarVisibility="Hidden"
         HorizontalScrollMode="Auto"
