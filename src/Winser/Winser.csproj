@@ -34,7 +34,22 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
+
+    <!--
+      Precompiled native code instead of JIT on first use. It costs disk, and pays for itself
+      twice at run time: the app starts without compiling itself first, and the code it runs
+      is mapped from the file rather than JIT-written into private, dirty pages. Applies to
+      `dotnet publish` only - a plain `dotnet build` still produces IL.
+    -->
     <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
+
+    <!--
+      The Windows App SDK carries translated resources for around forty languages. Winser's
+      own UI is English, so every one of those satellite assemblies is dead weight in the
+      output. (This drops the .NET/WinAppSDK satellite assemblies only - Windows' own language
+      handling, and pages, are untouched.)
+    -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
 
     <!--
       Without this, `dotnet build` fails with MSB4062 trying to load

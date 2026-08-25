@@ -59,3 +59,51 @@ jobs:
           dotnet-version: "8.0.x"
 
       - run: dotnet build Winser.sln -c Release -p:Platform=x64
+
+  # Winser ships self-contained, which means its own copy of .NET *and* of the Windows App
+  # SDK. That is a deliberate trade - no runtime prerequisites for the user - but it is also
+  # the entire deployment size, so it gets measured on every push instead of estimated.
+  size:
+    name: Publish size (Release x64)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish
+        run: >
+          dotnet publish src/Winser/Winser.csproj
+          -c Release
+          -p:Platform=x64
+          -r win-x64
+          -o publish
+
+      - name: Report
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem publish -Recurse -File
+          $total = ($files | Measure-Object Length -Sum).Sum
+
+          "## Publish size" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "**{0:N1} MB** across {1:N0} files." -f ($total / 1MB), $files.Count |
+            Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "### 25 largest" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "| File | MB |" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "|---|---:|" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $files | Sort-Object Length -Descending | Select-Object -First 25 | ForEach-Object {
+            "| {0} | {1:N1} |" -f $_.Name, ($_.Length / 1MB) |
+              Out-File -Append $env:GITHUB_STEP_SUMMARY
+          }
+
+          # Same numbers in the log, so they are readable without opening the summary.
+          "TOTAL: {0:N1} MB across {1:N0} files" -f ($total / 1MB), $files.Count
+          $files | Sort-Object Length -Descending | Select-Object -First 25 |
+            Format-Table @{ n = "MB"; e = { "{0:N1}" -f ($_.Length / 1MB) } }, Name |
+            Out-String -Width 200

@@ -274,6 +274,29 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel>
+              <TextBlock Text="Sleep background tabs" />
+              <TextBlock
+                Opacity="0.6"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="Frees the memory a tab holds while you are not looking at it. The page comes back exactly as you left it, but it stops running in the background. Tabs playing audio are never slept."
+                TextWrapping="Wrap" />
+            </StackPanel>
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.SleepBackgroundTabs, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
               <TextBlock Text="Run JavaScript" />
               <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Takes effect in tabs opened after the change." />
             </StackPanel>

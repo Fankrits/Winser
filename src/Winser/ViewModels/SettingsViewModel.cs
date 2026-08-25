@@ -85,6 +85,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Set(value, Values.OpenPopupsAsTabs, v => Values.OpenPopupsAsTabs = v);
     }
 
+    public bool SleepBackgroundTabs
+    {
+        get => Values.SleepBackgroundTabs;
+        set => Set(value, Values.SleepBackgroundTabs, v => Values.SleepBackgroundTabs = v);
+    }
+
     public bool EnableJavaScript
     {
         get => Values.EnableJavaScript;

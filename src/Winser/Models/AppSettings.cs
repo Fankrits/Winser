@@ -46,6 +46,15 @@ public sealed class AppSettings
 
     public TrackingPrevention TrackingPrevention { get; set; } = TrackingPrevention.Balanced;
 
+    /// <summary>
+    /// Freeze a tab's browser process while the tab is in the background, handing its memory
+    /// back until the tab is looked at again. Coming back is a resume, not a reload, so
+    /// nothing on the page is lost - but a frozen page's timers and scripts are stopped, so
+    /// anything that expects to keep working out of sight (a chat, a live dashboard) stays
+    /// quiet until it is on screen. Tabs that are audibly playing something are never frozen.
+    /// </summary>
+    public bool SleepBackgroundTabs { get; set; } = true;
+
     public bool EnableDevTools { get; set; } = true;
 
     public bool EnableJavaScript { get; set; } = true;

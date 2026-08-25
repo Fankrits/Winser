@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -188,34 +187,12 @@ public sealed partial class DownloadItem : ObservableObject
     [RelayCommand(CanExecute = nameof(IsCompleted))]
     private void Open()
     {
-        if (!FileExists)
+        if (FileExists)
         {
-            return;
-        }
-
-        try
-        {
-            Process.Start(new ProcessStartInfo(Record.FilePath) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
-        {
-            Debug.WriteLine($"[Winser] Could not open {Record.FilePath}: {ex.Message}");
+            SystemShell.OpenFile(Record.FilePath);
         }
     }
 
     [RelayCommand]
-    private void ShowInFolder()
-    {
-        try
-        {
-            var target = FileExists
-                ? $"/select,\"{Record.FilePath}\""
-                : $"\"{Path.GetDirectoryName(Record.FilePath)}\"";
-            Process.Start(new ProcessStartInfo("explorer.exe", target) { UseShellExecute = true });
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
-        {
-            Debug.WriteLine($"[Winser] Could not reveal {Record.FilePath}: {ex.Message}");
-        }
-    }
+    private void ShowInFolder() => SystemShell.RevealFile(Record.FilePath);
 }

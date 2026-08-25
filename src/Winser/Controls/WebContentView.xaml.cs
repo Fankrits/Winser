@@ -25,15 +25,28 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         typeof(WebContentView),
         new PropertyMetadata(null, OnTabChanged));
 
+    /// <summary>
+    /// How many forwarded shortcuts a page may land in <see cref="ShortcutBurstMs"/>.
+    /// Sized well above what a hand can do and far below what a script can.
+    /// </summary>
+    private const int ShortcutBurstLimit = 12;
+
+    private const long ShortcutBurstMs = 1000;
+
     private CoreWebView2? _core;
     private double _zoomFactor = 1.0;
     private bool _initializing;
     private bool _released;
+    private bool _suspended;
+
+    /// <summary>Arrival times of recently accepted shortcut messages; see <see cref="AllowShortcut"/>.</summary>
+    private readonly Queue<long> _shortcutTimes = new();
 
     public WebContentView()
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
     }
 
@@ -195,7 +208,16 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         (d as WebContentView)?.TryInitialize();
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => TryInitialize();
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        // Order matters: Resume makes the WebView2 visible again, and TryInitialize refuses to
+        // create a CoreWebView2 that cannot be seen. Swap these two and a tab that has never
+        // been shown comes back permanently blank.
+        Resume();
+        TryInitialize();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => _ = SuspendAsync();
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) => TryInitialize();
 
@@ -215,6 +237,86 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         }
 
         _ = InitializeAsync();
+    }
+
+    /// <summary>
+    /// Hands a background tab's memory back while nobody is looking at it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A Chromium renderer is the expensive thing in this application by an order of
+    /// magnitude - tens of megabytes per tab, held for as long as the tab is open. TabView
+    /// shows one tab at a time through a single ContentPresenter, so switching tabs unloads
+    /// the page that was showing, and that is the precise moment its renderer stops earning
+    /// what it costs.
+    /// </para>
+    /// <para>
+    /// Chromium freezes the process rather than discarding it, so coming back is a resume and
+    /// not a reload: scroll position, form contents and page state all survive. What does not
+    /// survive is anything the page wanted to keep doing off screen, which is why this is a
+    /// setting and why a tab that is audibly playing something is left alone.
+    /// </para>
+    /// </remarks>
+    private async Task SuspendAsync()
+    {
+        if (_core is not { } core || _released || !AppServices.Settings.Current.SleepBackgroundTabs)
+        {
+            return;
+        }
+
+        // Backgrounded but still making noise - a music tab is doing its job.
+        if (core.IsDocumentPlayingAudio && !core.IsMuted)
+        {
+            return;
+        }
+
+        try
+        {
+            // Independent of the freeze and worth having on its own: it asks Chromium to trim
+            // caches it would otherwise keep warm, and it still applies if the freeze is refused.
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+
+            // WebView2 refuses to freeze a browser it still considers on screen, and an
+            // unloaded element is not reliably invisible to it - so say so explicitly.
+            Browser.Visibility = Visibility.Collapsed;
+            _suspended = await core.TrySuspendAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Debug.WriteLine($"[Winser] Could not suspend this tab: {ex.Message}");
+            Browser.Visibility = Visibility.Visible;
+            return;
+        }
+
+        // The freeze is asynchronous and the user is not: they may already have switched back.
+        if (IsLoaded)
+        {
+            Resume();
+        }
+    }
+
+    private void Resume()
+    {
+        Browser.Visibility = Visibility.Visible;
+
+        if (_core is not { } core || _released)
+        {
+            return;
+        }
+
+        try
+        {
+            core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+            if (_suspended)
+            {
+                core.Resume();
+                _suspended = false;
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Debug.WriteLine($"[Winser] Could not resume this tab: {ex.Message}");
+        }
     }
 
     private async Task InitializeAsync()
@@ -274,13 +376,15 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         ApplyPreferences();
 
         // Serves Assets\Web (the new tab page) from https://assets.winser/ so it runs on a
-        // normal secure origin instead of file://.
+        // normal secure origin instead of file://. DenyCors rather than Allow: the new tab page
+        // only ever fetches its own files, so there is no reason to let some site on the
+        // internet read them out of the app folder.
         if (Directory.Exists(AppPaths.WebAssets))
         {
             core.SetVirtualHostNameToFolderMapping(
                 InternalPages.VirtualHost,
                 AppPaths.WebAssets,
-                CoreWebView2HostResourceAccessKind.Allow);
+                CoreWebView2HostResourceAccessKind.DenyCors);
         }
 
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Scripts.FindInPage);
@@ -448,7 +552,18 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
         // Handling it ourselves means the new page has no window.opener back-reference; in
         // exchange every popup lands as a tab in this window instead of an unmanaged window.
+        // Claimed before the scheme check on purpose: leaving a rejected popup unhandled would
+        // hand it straight back to WebView2 to open in a window Winser does not control.
         e.Handled = true;
+
+        if (!UrlHelper.IsWebRequestable(e.Uri))
+        {
+            // window.open() is page-driven, so it only gets the schemes web content is trusted
+            // with. winser:// would open Winser's own settings or history UI on a site's say-so.
+            Debug.WriteLine($"[Winser] Blocked a page-requested popup to {e.Uri}");
+            return;
+        }
+
         Tab.Shell.OpenInNewTab(e.Uri, background: !e.IsUserInitiated);
     }
 
@@ -528,12 +643,35 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             $"document.documentElement && (document.documentElement.style.zoom = '{factor}')");
     }
 
+    /// <summary>
+    /// The one channel that runs from page script back into the shell.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It cannot be closed off. <c>Scripts.ShortcutBridge</c> has to be injected into every
+    /// page, because the WinUI WebView2 element exposes no CoreWebView2Controller and therefore
+    /// no AcceleratorKeyPressed - a focused page swallows XAML accelerators outright, so the
+    /// page itself is the only thing that can hand Ctrl+T back. That means
+    /// <c>window.chrome.webview.postMessage</c> is reachable from any site's own JavaScript
+    /// too, and every message arriving here has to be treated as attacker-controlled.
+    /// </para>
+    /// <para>
+    /// So the messages are split by what they can actually do. <c>navigate</c> and
+    /// <c>newtab</c> point the browser somewhere and belong to the new tab page alone; they
+    /// are gated on <see cref="InternalPages.IsTrustedOrigin"/> and on the scheme being one
+    /// web content may ask for. <c>key</c> and <c>zoom</c> have to keep working from any page
+    /// - that is their entire purpose - and a forged one is indistinguishable from a real key
+    /// press, so instead they are held to a rate no hand can exceed and no script can spam.
+    /// </para>
+    /// </remarks>
     private void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         string payload;
+        string source;
         try
         {
             payload = e.TryGetWebMessageAsString();
+            source = e.Source;
         }
         catch (Exception ex) when (ex is ArgumentException or System.Runtime.InteropServices.COMException)
         {
@@ -545,6 +683,8 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         {
             return;
         }
+
+        var trusted = InternalPages.IsTrustedOrigin(source);
 
         try
         {
@@ -558,10 +698,10 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
             switch (kind.GetString())
             {
-                case "key":
+                case "key" when AllowShortcut():
                     HandleForwardedKey(root);
                     break;
-                case "zoom" when root.TryGetProperty("d", out var direction):
+                case "zoom" when AllowShortcut() && root.TryGetProperty("d", out var direction):
                     if (direction.GetInt32() > 0)
                     {
                         Tab?.ZoomInCommand.Execute(null);
@@ -572,11 +712,19 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
                     }
 
                     break;
-                case "navigate" when root.TryGetProperty("url", out var url):
+                case "navigate" when trusted && root.TryGetProperty("url", out var url):
+                    // The new tab page's own search box and shortcut buttons, so whatever the
+                    // user typed there gets the same treatment as the address bar - including
+                    // winser:// links, which is why this case is origin-gated.
                     Tab?.Navigate(url.GetString());
                     break;
-                case "newtab" when root.TryGetProperty("url", out var newTabUrl):
-                    Tab?.Shell.OpenInNewTab(newTabUrl.GetString() ?? string.Empty, background: true);
+                case "newtab" when trusted && root.TryGetProperty("url", out var newTabUrl):
+                    var target = newTabUrl.GetString() ?? string.Empty;
+                    if (UrlHelper.IsWebRequestable(target))
+                    {
+                        Tab?.Shell.OpenInNewTab(target, background: true);
+                    }
+
                     break;
             }
         }
@@ -584,6 +732,29 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         {
             // Pages can post anything; ignore what is not ours.
         }
+    }
+
+    /// <summary>
+    /// A sliding one-second budget for shortcuts arriving off a page. Key repeat tops out
+    /// around 30 keys a second and a real shortcut needs a chord, so nothing a person does
+    /// comes close to the cap - while a script posting Ctrl+T in a loop stops after twelve
+    /// tabs instead of opening them until the machine gives up.
+    /// </summary>
+    private bool AllowShortcut()
+    {
+        var now = Environment.TickCount64;
+        while (_shortcutTimes.Count > 0 && now - _shortcutTimes.Peek() >= ShortcutBurstMs)
+        {
+            _shortcutTimes.Dequeue();
+        }
+
+        if (_shortcutTimes.Count >= ShortcutBurstLimit)
+        {
+            return false;
+        }
+
+        _shortcutTimes.Enqueue(now);
+        return true;
     }
 
     private void HandleForwardedKey(JsonElement message)
@@ -595,11 +766,22 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             return;
         }
 
-        Tab.Shell.HandleShortcut(
-            key,
-            message.TryGetProperty("ctrl", out var c) && c.GetBoolean(),
-            message.TryGetProperty("shift", out var s) && s.GetBoolean(),
-            message.TryGetProperty("alt", out var a) && a.GetBoolean());
+        var ctrl = message.TryGetProperty("ctrl", out var c) && c.GetBoolean();
+        var shift = message.TryGetProperty("shift", out var s) && s.GetBoolean();
+        var alt = message.TryGetProperty("alt", out var a) && a.GetBoolean();
+
+        // The bridge only ever forwards a Ctrl or Alt chord, a function key, or Escape while
+        // full screen. A bare letter on this channel did not come from it, so drop it rather
+        // than let a page invent shortcuts the bridge would never have sent.
+        var plausible = ctrl || alt
+            || key is >= Windows.System.VirtualKey.F1 and <= Windows.System.VirtualKey.F12
+            || (key == Windows.System.VirtualKey.Escape && Tab.Shell.IsFullScreen);
+        if (!plausible)
+        {
+            return;
+        }
+
+        Tab.Shell.HandleShortcut(key, ctrl, shift, alt);
     }
 
     // ---------------------------------------------------------------------- helpers

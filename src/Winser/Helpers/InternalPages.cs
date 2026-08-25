@@ -27,6 +27,24 @@ public static class InternalPages
         !string.IsNullOrWhiteSpace(url) &&
         url.StartsWith(Scheme + "://", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// True when a document was served from Winser's own virtual host, i.e. out of
+    /// <c>Assets\Web</c> and not off the internet.
+    /// </summary>
+    /// <remarks>
+    /// This is the trust boundary for anything a page posts over
+    /// <c>window.chrome.webview.postMessage</c>: that channel is open to every document
+    /// WebView2 loads, so the shell has to ask where a message actually came from before
+    /// acting on it. Nothing outside this origin may steer navigation.
+    /// A hostile page cannot forge its way in - it can embed the new tab page in a frame,
+    /// but the same-origin policy still stops it from running script there, and the folder
+    /// holds no page that would run script on its behalf.
+    /// </remarks>
+    public static bool IsTrustedOrigin(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+        uri.Host.Equals(VirtualHost, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Lower-cases and trims a <c>winser://</c> URL so comparisons are stable.</summary>
     public static string Normalize(string url)
     {

@@ -30,6 +30,22 @@ public static partial class UrlHelper
         "mailto", "tel", InternalPages.Scheme,
     };
 
+    /// <summary>
+    /// The far narrower set a *page* may steer the browser to. <see cref="NavigableSchemes"/>
+    /// is what the person at the keyboard is allowed to type; this is what web content is
+    /// allowed to ask for. The gap is the point: <c>winser://</c> reaches Winser's own
+    /// settings, history and downloads UI, and <c>file://</c> reaches the local disk, so
+    /// neither may be opened on a page's say-so.
+    /// </summary>
+    private static readonly HashSet<string> WebRequestableSchemes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "http", "https",
+    };
+
+    /// <summary>True when web content may ask Winser to open this URL.</summary>
+    public static bool IsWebRequestable(string? url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) && WebRequestableSchemes.Contains(uri.Scheme);
+
     /// <summary>host[:port][/path] — a dotted name, a bracketed IPv6 literal, or bare "localhost".</summary>
     [GeneratedRegex(
         @"^(?:\[[0-9A-Fa-f:]+\]|[\w\-]+(?:\.[\w\-]+)+|localhost)(?::\d{1,5})?(?:[/?#].*)?$",
