@@ -125,10 +125,12 @@ CI measures this on every push rather than estimating it — the **Publish size*
 `.github/workflows/build.yml` publishes both deployment shapes and prints their totals and the
 25 largest files to the run summary. As of `x64` Release:
 
-| Shape | Size |
-|---|---|
-| Self-contained (what ships) | **203.8 MB**, 444 files |
-| Framework-dependent | see the latest **Publish size** run |
+| Shape | Size | Files |
+|---|---:|---:|
+| Self-contained (what ships) | **203.8 MB** | 444 |
+| Framework-dependent | **50.5 MB** | 33 |
+
+Three quarters of the download is the two bundled runtimes.
 
 Where it goes: `Microsoft.Windows.SDK.NET.dll` alone is **54.1 MB**, a quarter of the app — it
 is the C# projection of the entire Windows API surface, and .NET 8 ships it whole. WinUI itself
@@ -139,10 +141,10 @@ Windows App SDK), then the .NET runtime (`System.Private.CoreLib.dll` 12.6 MB, `
 What can still be done, honestly:
 
 - **Drop the self-contained runtimes** — set `WindowsAppSDKSelfContained` and `SelfContained` to
-  `false` in `src/Winser/Winser.csproj`. By far the biggest lever, since the two bundled runtimes
-  *are* most of the output; the cost is that the machine then needs the .NET 8 Desktop Runtime
-  and the Windows App SDK runtime installed. The CI job publishes this shape too, so the exact
-  saving is a real measured number and not a guess.
+  `false` in `src/Winser/Winser.csproj`. By far the biggest lever: **203.8 MB down to 50.5 MB**,
+  444 files down to 33. The cost is that the machine then needs the .NET 8 Desktop Runtime and
+  the Windows App SDK runtime installed, which is exactly the prerequisite the shipped shape
+  exists to avoid. CI publishes both, so that trade stays a measured number rather than a guess.
 - **Move to .NET 9+**, where the Windows SDK projection is split up rather than shipped as one
   54 MB assembly. Not done here: it is a framework upgrade, not a size setting.
 - **Trimming is out.** WinUI 3 activates XAML types by name at run time, so `PublishTrimmed`
