@@ -34,6 +34,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        SizeChanged += OnSizeChanged;
     }
 
     public BrowserTabViewModel? Tab
@@ -191,13 +192,30 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     private static void OnTabChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is WebContentView view && view.IsLoaded)
-        {
-            _ = view.InitializeAsync();
-        }
+        (d as WebContentView)?.TryInitialize();
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e) => _ = InitializeAsync();
+    private void OnLoaded(object sender, RoutedEventArgs e) => TryInitialize();
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e) => TryInitialize();
+
+    /// <summary>
+    /// Holds CoreWebView2 creation back until the control is genuinely laid out on screen.
+    /// A WebView2 brought up while collapsed or zero-sized ends up with a zero-bounds
+    /// controller: it navigates, reports its title and favicon, and looks entirely healthy
+    /// from the outside, while never compositing a single pixel - and it does not recover
+    /// once the control is shown. Waiting for a real size is the difference between a live
+    /// page and a permanently blank one.
+    /// </summary>
+    private void TryInitialize()
+    {
+        if (!IsLoaded || ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return;
+        }
+
+        _ = InitializeAsync();
+    }
 
     private async Task InitializeAsync()
     {

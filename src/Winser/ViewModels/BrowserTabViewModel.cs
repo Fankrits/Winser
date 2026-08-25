@@ -107,13 +107,6 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FindStatus))]
     private bool _findSupported = true;
 
-    /// <summary>
-    /// Set once the tab has shown web content and never unset, so hopping to
-    /// <c>winser://settings</c> and back does not tear down the WebView2 (and its history).
-    /// </summary>
-    [ObservableProperty]
-    private bool _needsWebView;
-
     public BrowserTabViewModel(BrowserViewModel shell, string? url = null)
     {
         _shell = shell;
@@ -127,7 +120,6 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         _title = InternalPages.Title(_kind);
         _addressText = UrlHelper.ForDisplay(target);
         _zoomFactor = AppServices.Settings.Current.DefaultZoomFactor;
-        _needsWebView = _kind == BrowserTabKind.Web;
 
         if (_kind == BrowserTabKind.Web)
         {
@@ -284,7 +276,6 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         }
 
         Kind = BrowserTabKind.Web;
-        NeedsWebView = true;
         Url = InternalPages.FromNavigationTarget(target);
         AddressText = UrlHelper.ForDisplay(Url);
 

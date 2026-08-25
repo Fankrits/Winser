@@ -447,11 +447,19 @@
     <!--  ============================== content ==============================  -->
     <Grid Grid.Row="3">
 
+      <!--
+        Deliberately always present and always visible, with no x:Load and no Visibility
+        binding. A WebView2 created while collapsed or zero-sized gets a zero-bounds
+        controller: it navigates and raises title/favicon events perfectly normally, but never
+        composites a single pixel, and it does not recover when shown later. Both of those
+        bindings evaluate against a null ViewModel during InitializeComponent, so the control
+        was being realized collapsed and initialised in exactly that broken state.
+        The native pages below are later siblings with opaque backgrounds, so they cover this
+        when a winser:// page is showing - no need to hide it.
+      -->
       <controls:WebContentView
         x:Name="WebContent"
-        x:Load="{x:Bind ViewModel.NeedsWebView, Mode=OneWay}"
-        Tab="{x:Bind ViewModel, Mode=OneWay}"
-        Visibility="{x:Bind ViewModel.IsWeb, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+        Tab="{x:Bind ViewModel, Mode=OneWay}" />
 
       <views:SettingsView
         x:Name="SettingsPane"
