@@ -121,24 +121,40 @@ installed first. Those two copies are essentially the whole download — Winser'
 rounding error next to them, and the Chromium that actually renders pages is not in there at all
 (it is the shared WebView2 runtime already on the machine).
 
-CI measures the real number on every push rather than estimating it: see the **Publish size**
-job in `.github/workflows/build.yml`, which prints the total and the 25 largest files to the run
-summary.
+CI measures this on every push rather than estimating it — the **Publish size** job in
+`.github/workflows/build.yml` publishes both deployment shapes and prints their totals and the
+25 largest files to the run summary. As of `x64` Release:
 
-Two levers, in order of how much they give back:
+| Shape | Size |
+|---|---|
+| Self-contained (what ships) | **203.8 MB**, 444 files |
+| Framework-dependent | see the latest **Publish size** run |
 
-- **Drop the self-contained runtimes.** Set `WindowsAppSDKSelfContained` and `SelfContained` to
-  `false` in `src/Winser/Winser.csproj`. This is the big one — most of the output is those two
-  runtimes — in exchange for the machine needing the .NET 8 Desktop Runtime and the Windows App
-  SDK runtime installed.
-- **`<InvariantGlobalization>true</InvariantGlobalization>`.** Deletes ICU (`icudt.dat`), the
-  single largest file in a self-contained .NET app. Deliberately *not* enabled: it makes every
-  culture behave like the invariant one, so dates, sorting and case rules stop being correct
-  outside English. A browser is the wrong place to trade that away for disk.
+Where it goes: `Microsoft.Windows.SDK.NET.dll` alone is **54.1 MB**, a quarter of the app — it
+is the C# projection of the entire Windows API surface, and .NET 8 ships it whole. WinUI itself
+is next (`Microsoft.WinUI.dll` 15.9 MB, `Microsoft.ui.xaml.dll` 13.7 MB, plus the rest of the
+Windows App SDK), then the .NET runtime (`System.Private.CoreLib.dll` 12.6 MB, `coreclr.dll`
+4.8 MB). Winser's own assembly does not make the top 25.
 
-`<SatelliteResourceLanguages>en</SatelliteResourceLanguages>` is already set, which drops the
-Windows App SDK's translated resource assemblies for the forty-odd languages Winser's own UI
-does not speak.
+What can still be done, honestly:
+
+- **Drop the self-contained runtimes** — set `WindowsAppSDKSelfContained` and `SelfContained` to
+  `false` in `src/Winser/Winser.csproj`. By far the biggest lever, since the two bundled runtimes
+  *are* most of the output; the cost is that the machine then needs the .NET 8 Desktop Runtime
+  and the Windows App SDK runtime installed. The CI job publishes this shape too, so the exact
+  saving is a real measured number and not a guess.
+- **Move to .NET 9+**, where the Windows SDK projection is split up rather than shipped as one
+  54 MB assembly. Not done here: it is a framework upgrade, not a size setting.
+- **Trimming is out.** WinUI 3 activates XAML types by name at run time, so `PublishTrimmed`
+  breaks it — which is why obvious dead weight (`System.Private.Xml.dll` at 7.6 MB,
+  `System.Data.Common.dll`, `Microsoft.Windows.Widgets.dll`) stays in the output despite Winser
+  never touching any of it.
+- **`InvariantGlobalization` buys nothing here.** It is the standard advice for shrinking a
+  self-contained .NET app, and on Windows it is wrong: .NET uses the ICU that ships *with the
+  OS*, so there is no bundled `icudt.dat` to delete. The measurement above is what caught that.
+
+`<SatelliteResourceLanguages>en</SatelliteResourceLanguages>` is set, dropping the Windows App
+SDK's translated resource assemblies for the forty-odd languages Winser's own UI does not speak.
 
 ## Memory
 
