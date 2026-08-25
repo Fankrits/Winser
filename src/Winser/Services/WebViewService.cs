@@ -25,26 +25,11 @@ public sealed class WebViewService
 
     private WebViewProfile? _shared;
 
-    /// <summary>The Evergreen runtime version, or null when WebView2 is not installed.</summary>
-    public string? RuntimeVersion
-    {
-        get
-        {
-            try
-            {
-                var version = CoreWebView2Environment.GetAvailableBrowserVersionString();
-                return string.IsNullOrEmpty(version) ? null : version;
-            }
-            catch (WebView2RuntimeNotFoundException)
-            {
-                return null;
-            }
-            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
-            {
-                return null;
-            }
-        }
-    }
+    /// <summary>
+    /// The Evergreen runtime version, known once an environment has been created successfully;
+    /// null before that, and null for good if creating one failed because it is not installed.
+    /// </summary>
+    public string? RuntimeVersion { get; private set; }
 
     public async Task<WebViewProfile> GetSharedAsync()
     {
@@ -109,7 +94,7 @@ public sealed class WebViewService
         }
     }
 
-    private static Task<CoreWebView2Environment> CreateEnvironmentAsync(string userDataFolder)
+    private async Task<CoreWebView2Environment> CreateEnvironmentAsync(string userDataFolder)
     {
         var options = new CoreWebView2EnvironmentOptions
         {
@@ -118,9 +103,12 @@ public sealed class WebViewService
             EnableTrackingPrevention = true,
         };
 
-        return CoreWebView2Environment.CreateWithOptionsAsync(
+        var environment = await CoreWebView2Environment.CreateWithOptionsAsync(
             browserExecutableFolder: string.Empty,
             userDataFolder: userDataFolder,
-            options: options).AsTask();
+            options: options).AsTask().ConfigureAwait(true);
+
+        RuntimeVersion = environment.BrowserVersionString;
+        return environment;
     }
 }

@@ -348,13 +348,6 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         IsMuted = muted;
     }
 
-    public void ReportZoomChanged(double factor)
-    {
-        _syncingZoom = true;
-        ZoomFactor = factor;
-        _syncingZoom = false;
-    }
-
     // -------------------------------------------------------------------- commands
 
     [RelayCommand(CanExecute = nameof(CanGoBack))]

@@ -165,6 +165,16 @@ public static class Scripts
             e.preventDefault();
             e.stopPropagation();
           }, true);
+
+          // WebView2's built-in Ctrl+scroll zoom is switched off so the shell stays the single
+          // source of truth for the zoom level shown in the toolbar.
+          addEventListener('wheel', (e) => {
+            if (!e.ctrlKey) { return; }
+            e.preventDefault();
+            window.chrome.webview.postMessage(JSON.stringify({
+              t: 'zoom', d: e.deltaY < 0 ? 1 : -1,
+            }));
+          }, { capture: true, passive: false });
         })();
         """;
 }

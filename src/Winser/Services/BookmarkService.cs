@@ -32,11 +32,6 @@ public sealed class BookmarkService : IDisposable
     /// <summary>Bookmarks pinned directly to the bar (no folder).</summary>
     public IEnumerable<Bookmark> BarItems => Items.Where(b => string.IsNullOrEmpty(b.Folder));
 
-    public IEnumerable<string> Folders => Items
-        .Select(b => b.Folder)
-        .Where(f => !string.IsNullOrEmpty(f))
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .Order(StringComparer.CurrentCultureIgnoreCase)!;
 
     public bool Contains(string? url) => !string.IsNullOrEmpty(url) && _byUrl.ContainsKey(url);
 

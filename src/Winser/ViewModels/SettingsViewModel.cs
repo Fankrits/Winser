@@ -163,8 +163,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public string RuntimeDescription =>
         AppServices.WebView.RuntimeVersion is { } version
-            ? $"Microsoft Edge WebView2 Runtime {version}"
-            : "The WebView2 Runtime is not installed — Winser cannot render pages without it.";
+            ? $"Rendering with the Microsoft Edge WebView2 Runtime {version}"
+            : "The WebView2 Runtime version appears here once a web page has loaded.";
 
     public string DataFolder => AppPaths.Root;
 

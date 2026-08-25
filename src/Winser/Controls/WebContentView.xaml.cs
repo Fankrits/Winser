@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -25,7 +26,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         new PropertyMetadata(null, OnTabChanged));
 
     private CoreWebView2? _core;
-    private long _zoomToken;
+    private double _zoomFactor = 1.0;
     private bool _initializing;
     private bool _released;
 
@@ -45,10 +46,20 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     public bool IsReady => _core is not null && !_released;
 
+    /// <summary>
+    /// Page zoom. The WinUI WebView2 element does not surface CoreWebView2Controller.ZoomFactor
+    /// (only the WPF and WinForms wrappers do), so Winser emulates it with the CSS zoom property
+    /// on the document element — which reflows the page the same way browser zoom does — and
+    /// reapplies it on every navigation.
+    /// </summary>
     public double ZoomFactor
     {
-        get => Browser.ZoomFactor;
-        set => Browser.ZoomFactor = value;
+        get => _zoomFactor;
+        set
+        {
+            _zoomFactor = value;
+            ApplyZoom();
+        }
     }
 
     public void Navigate(string url)
@@ -201,19 +212,17 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             var profile = await Tab.Shell.GetProfileAsync();
             await Browser.EnsureCoreWebView2Async(profile.Environment);
         }
-        catch (WebView2RuntimeNotFoundException)
-        {
-            Tab?.ReportNavigationCompleted(
-                false,
-                "The Microsoft Edge WebView2 Runtime is not installed. Winser renders pages with " +
-                "WebView2, so it needs the runtime before it can browse.");
-            return;
-        }
         catch (Exception ex)
         {
             // A tab that cannot start its browser must still render its error state rather
-            // than take the window down with it.
-            Tab?.ReportNavigationCompleted(false, $"WebView2 could not start: {ex.Message}");
+            // than take the window down with it. The overwhelmingly likely cause is a machine
+            // without the Evergreen runtime, so say that rather than showing an HRESULT.
+            Tab?.ReportNavigationCompleted(
+                false,
+                AppServices.WebView.RuntimeVersion is null
+                    ? "The Microsoft Edge WebView2 Runtime is not installed. Winser renders pages " +
+                      "with WebView2, so it needs the runtime before it can browse."
+                    : $"WebView2 could not start: {ex.Message}");
             return;
         }
         finally
@@ -241,8 +250,10 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.Settings.AreDefaultContextMenusEnabled = true;
         core.Settings.AreDefaultScriptDialogsEnabled = true;
         core.Settings.IsSwipeNavigationEnabled = true;
-        core.Settings.IsZoomControlEnabled = true;
-        core.Settings.IsPinchZoomEnabled = true;
+        // Winser owns zoom (see ZoomFactor), and WebView2's own Ctrl+scroll zoom would be a
+        // second, invisible source of truth. The injected script forwards Ctrl+wheel instead.
+        core.Settings.IsZoomControlEnabled = false;
+        core.Settings.IsPinchZoomEnabled = false;
         // Winser draws its own link preview, so the built-in one would just double up.
         core.Settings.IsStatusBarEnabled = false;
 
@@ -301,20 +312,11 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.IsMutedChanged += OnAudioStateChanged;
         core.ProcessFailed += OnProcessFailed;
         core.WebMessageReceived += OnWebMessageReceived;
-
-        // WebView2 exposes ZoomFactor as a dependency property rather than an event, and the
-        // page can change it itself with Ctrl+scroll.
-        _zoomToken = Browser.RegisterPropertyChangedCallback(WebView2.ZoomFactorProperty, OnZoomFactorChanged);
+        core.DOMContentLoaded += OnDomContentLoaded;
     }
 
     private void Unhook()
     {
-        if (_zoomToken != 0)
-        {
-            Browser.UnregisterPropertyChangedCallback(WebView2.ZoomFactorProperty, _zoomToken);
-            _zoomToken = 0;
-        }
-
         if (_core is not { } core)
         {
             return;
@@ -335,6 +337,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.IsMutedChanged -= OnAudioStateChanged;
         core.ProcessFailed -= OnProcessFailed;
         core.WebMessageReceived -= OnWebMessageReceived;
+        core.DOMContentLoaded -= OnDomContentLoaded;
         _core = null;
     }
 
@@ -457,8 +460,20 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         Tab?.ReportNavigationCompleted(false, "This page stopped responding and was closed.");
     }
 
-    private void OnZoomFactorChanged(DependencyObject sender, DependencyProperty property) =>
-        Tab?.ReportZoomChanged(Browser.ZoomFactor);
+    private void OnDomContentLoaded(CoreWebView2 sender, CoreWebView2DOMContentLoadedEventArgs args) =>
+        ApplyZoom();
+
+    private void ApplyZoom()
+    {
+        if (_core is null)
+        {
+            return;
+        }
+
+        var factor = _zoomFactor.ToString("0.###", CultureInfo.InvariantCulture);
+        _ = ExecuteScriptAsync(
+            $"document.documentElement && (document.documentElement.style.zoom = '{factor}')");
+    }
 
     private void OnWebMessageReceived(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
@@ -492,6 +507,17 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             {
                 case "key":
                     HandleForwardedKey(root);
+                    break;
+                case "zoom" when root.TryGetProperty("d", out var direction):
+                    if (direction.GetInt32() > 0)
+                    {
+                        Tab?.ZoomInCommand.Execute(null);
+                    }
+                    else
+                    {
+                        Tab?.ZoomOutCommand.Execute(null);
+                    }
+
                     break;
                 case "navigate" when root.TryGetProperty("url", out var url):
                     Tab?.Navigate(url.GetString());
