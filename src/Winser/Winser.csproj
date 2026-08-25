@@ -35,6 +35,18 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Release'">true</PublishReadyToRun>
+
+    <!--
+      Attempted workaround for `dotnet build` failing with MSB4062 on
+      Microsoft.Build.Packaging.Pri.Tasks.ExpandPriContent (the PRI/MRT resource-indexing task
+      is not part of the .NET SDK's MSBuild, only Visual Studio's - see microsoft/WindowsAppSDK
+      issues #3939, #4889, #3548). Unverified: this unblocked one unpackaged app in a GitHub
+      issue with the same WindowsPackageType=None shape as this project, but Microsoft's own
+      tracker and the Uno Platform maintainers both describe this as an unresolved, structural
+      limitation with no general fix - so `msbuild` (see README) remains the supported path
+      regardless of what this property does here.
+    -->
+    <EnableMsixTooling>true</EnableMsixTooling>
   </PropertyGroup>
 
   <!-- A self-contained app always needs a RID; derive it from the selected VS platform. -->

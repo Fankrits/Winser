@@ -41,3 +41,20 @@ jobs:
           -p:Configuration=${{ matrix.configuration }}
           -p:Platform=x64
           -m
+
+  # Informational only: checks whether EnableMsixTooling unblocks `dotnet build` directly
+  # (see the property's comment in Winser.csproj). continue-on-error keeps a "no" here from
+  # failing the workflow - the msbuild job above is the one that gates CI either way.
+  probe-dotnet-build:
+    name: Probe - does dotnet build work now?
+    runs-on: windows-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - run: dotnet build Winser.sln -c Release -p:Platform=x64
