@@ -1,6 +1,7 @@
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Windows.UI;
+using Windows.UI;   // the Color struct; Colors itself only exists under Microsoft.UI
 using Winser.Models;
 
 namespace Winser.Helpers;
