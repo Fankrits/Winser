@@ -249,7 +249,7 @@
         AutomationProperties.Name="Settings and more"
         Content="&#xE712;"
         Style="{StaticResource ToolbarIconButtonStyle}"
-        ToolTipService.ToolTip="Settings and more (Alt+F)">
+        ToolTipService.ToolTip="Settings and more">
         <Button.Flyout>
           <MenuFlyout Placement="BottomEdgeAlignedRight">
             <MenuFlyoutItem
