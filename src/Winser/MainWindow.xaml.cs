@@ -5,7 +5,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.System;
-using Windows.UI.Core;
 using Winser.Helpers;
 using Winser.Services;
 using Winser.ViewModels;
@@ -221,7 +220,8 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     private static bool IsKeyDown(VirtualKey key) =>
-        InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
+        InputKeyboardSource.GetKeyStateForCurrentThread(key)
+            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     // ------------------------------------------------------------------ tab strip
 

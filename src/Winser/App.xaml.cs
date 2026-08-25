@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Winser.Helpers;
 using Winser.Services;
+using XamlUnhandledExceptionEventArgs = Microsoft.UI.Xaml.UnhandledExceptionEventArgs;
 
 namespace Winser;
 
@@ -38,7 +39,7 @@ public partial class App : Application
 
     private static void OnLastWindowClosed(object? sender, EventArgs e) => AppServices.Shutdown();
 
-    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    private static void OnUnhandledException(object sender, XamlUnhandledExceptionEventArgs e)
     {
         // Persist whatever is queued before the process goes down.
         Debug.WriteLine($"[Winser] Unhandled exception: {e.Exception}");

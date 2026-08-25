@@ -112,7 +112,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     public double HistoryRetentionDays
     {
         get => Values.HistoryRetentionDays;
-        set => Set((int)value, Values.HistoryRetentionDays, v => Values.HistoryRetentionDays = v);
+        set
+        {
+            // An emptied NumberBox reports NaN.
+            if (double.IsNaN(value))
+            {
+                return;
+            }
+
+            Set((int)Math.Clamp(value, 0, 3650), Values.HistoryRetentionDays, v => Values.HistoryRetentionDays = v);
+        }
     }
 
     public double DefaultZoomPercent
@@ -120,6 +129,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         get => Math.Round(Values.DefaultZoomFactor * 100);
         set
         {
+            if (double.IsNaN(value))
+            {
+                return;
+            }
+
             var factor = Math.Clamp(value, 25, 500) / 100.0;
             if (Math.Abs(factor - Values.DefaultZoomFactor) < 0.001)
             {
