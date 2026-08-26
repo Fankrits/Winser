@@ -33,31 +33,31 @@ public sealed partial class BrowserViewModel : ObservableObject
     private Task<WebViewProfile>? _profileTask;
 
     [ObservableProperty]
-    private BrowserTabViewModel? _selectedTab;
+    public partial BrowserTabViewModel? SelectedTab { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
-    private bool _isFullScreen;
+    public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
-    private bool _showBookmarksBar;
+    public partial bool ShowBookmarksBar { get; set; }
 
     [ObservableProperty]
-    private bool _hasActiveDownloads;
+    public partial bool HasActiveDownloads { get; set; }
 
     public BrowserViewModel(bool isPrivate)
     {
         IsPrivate = isPrivate;
-        _showBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar && !isPrivate;
+        ShowBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar && !isPrivate;
 
         AppServices.Bookmarks.Items.CollectionChanged += OnBookmarksChanged;
         AppServices.Downloads.Items.CollectionChanged += OnDownloadsChanged;
         AppServices.Downloads.Started += OnDownloadStarted;
         AppServices.Settings.Changed += OnSettingsChanged;
 
-        _hasActiveDownloads = AppServices.Downloads.HasActiveDownloads;
+        HasActiveDownloads = AppServices.Downloads.HasActiveDownloads;
 
         RebuildBookmarkBar();
     }

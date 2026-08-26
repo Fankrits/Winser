@@ -24,10 +24,10 @@ public sealed partial class HistoryViewModel : ObservableObject
     private const int MaxResults = 500;
 
     [ObservableProperty]
-    private string _query = string.Empty;
+    public partial string Query { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private bool _isEmpty;
+    public partial bool IsEmpty { get; set; }
 
     public HistoryViewModel() => Refresh();
 

@@ -4,7 +4,7 @@
 
 <h1 align="center">Winser</h1>
 
-<p align="center">A native Windows web browser built with WinUI 3, .NET 8 and WebView2.</p>
+<p align="center">A native Windows web browser built with WinUI 3, .NET 10 and WebView2.</p>
 
 ---
 
@@ -77,8 +77,8 @@ back to the shell and leaves editing shortcuts alone.
 ## Requirements
 
 - Windows 10 version 1809 (17763) or later — Windows 11 recommended for Mica
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) — pinned in `global.json` for
-  consistent restore/tooling behavior across machines
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) — pinned in `global.json`
+  for consistent restore/tooling behavior across machines
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
   — preinstalled on Windows 11 and on up-to-date Windows 10
 
@@ -108,7 +108,7 @@ Developer PowerShell:
 ```powershell
 msbuild Winser.sln -t:Restore -p:Configuration=Release -p:Platform=x64
 msbuild Winser.sln -p:Configuration=Release -p:Platform=x64
-.\src\Winser\bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\Winser.exe
+.\src\Winser\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Winser.exe
 ```
 
 `winser.exe https://example.com` opens that URL on launch.

@@ -21,24 +21,24 @@ public sealed partial class DownloadItem : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProgressPercent))]
     [NotifyPropertyChangedFor(nameof(StatusText))]
-    private long _receivedBytes;
+    public partial long ReceivedBytes { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProgressPercent))]
     [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
     [NotifyPropertyChangedFor(nameof(StatusText))]
-    private long _totalBytes;
+    public partial long TotalBytes { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsInProgress))]
     [NotifyPropertyChangedFor(nameof(IsIndeterminate))]
     [NotifyPropertyChangedFor(nameof(IsCompleted))]
     [NotifyPropertyChangedFor(nameof(StatusText))]
-    private DownloadState _state;
+    public partial DownloadState State { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StatusText))]
-    private bool _isPaused;
+    public partial bool IsPaused { get; set; }
 
     public DownloadItem(
         DownloadRecord record, CoreWebView2DownloadOperation? operation, Action onChanged, bool isPrivate = false)
@@ -46,9 +46,9 @@ public sealed partial class DownloadItem : ObservableObject
         Record = record;
         IsPrivate = isPrivate;
         _onChanged = onChanged;
-        _receivedBytes = record.ReceivedBytes;
-        _totalBytes = record.TotalBytes;
-        _state = record.State;
+        ReceivedBytes = record.ReceivedBytes;
+        TotalBytes = record.TotalBytes;
+        State = record.State;
 
         if (operation is not null)
         {

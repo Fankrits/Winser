@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <RootNamespace>Winser</RootNamespace>
@@ -16,13 +16,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <DefaultLanguage>en-US</DefaultLanguage>
-
-    <!--
-      MVVMTK0045: [ObservableProperty] on a field is flagged as not AOT-safe in WinRT scenarios;
-      the suggested fix is a partial property, which needs C# 13 and so a net9.0+ target. Winser
-      targets net8.0 and is not published AOT, so the fields stay and the notice is muted.
-    -->
-    <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
 
     <!--
       Winser ships as an unpackaged (plain .exe) desktop app so it can be xcopy-deployed
@@ -77,10 +70,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- Microsoft.Web.WebView2 comes in transitively with the Windows App SDK, which
          pins the loader version its WebView2 XAML control expects. Do not pin it here. -->
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250228001" />
   </ItemGroup>
 

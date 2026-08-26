@@ -31,92 +31,92 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsWeb), nameof(IsSettings), nameof(IsHistory))]
     [NotifyPropertyChangedFor(nameof(IsDownloads), nameof(IsBookmarks), nameof(IsNativePage))]
-    private BrowserTabKind _kind;
+    public partial BrowserTabKind Kind { get; set; }
 
     [ObservableProperty]
-    private string _title;
+    public partial string Title { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HostLabel), nameof(Security), nameof(SecurityGlyph))]
     [NotifyPropertyChangedFor(nameof(SecurityTooltip), nameof(IsNewTabPage))]
-    private string _url;
+    public partial string Url { get; set; }
 
     [ObservableProperty]
-    private string _addressText;
+    public partial string AddressText { get; set; }
 
     [ObservableProperty]
-    private IconSource? _tabIcon;
+    public partial IconSource? TabIcon { get; set; }
 
     [ObservableProperty]
-    private ImageSource? _faviconImage;
+    public partial ImageSource? FaviconImage { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ReloadGlyph), nameof(ReloadTooltip))]
-    private bool _isLoading;
+    public partial bool IsLoading { get; set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoBackCommand))]
-    private bool _canGoBack;
+    public partial bool CanGoBack { get; set; }
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(GoForwardCommand))]
-    private bool _canGoForward;
+    public partial bool CanGoForward { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStatusText))]
-    private string _statusText = string.Empty;
+    public partial string StatusText { get; set; } = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(BookmarkGlyph), nameof(BookmarkTooltip))]
-    private bool _isBookmarked;
+    public partial bool IsBookmarked { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ZoomLabel), nameof(IsZoomed))]
-    private double _zoomFactor = 1.0;
+    public partial double ZoomFactor { get; set; } = 1.0;
 
     [ObservableProperty]
-    private bool _isAudioPlaying;
+    public partial bool IsAudioPlaying { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MuteGlyph), nameof(MuteTooltip))]
-    private bool _isMuted;
+    public partial bool IsMuted { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasError))]
-    private string? _errorMessage;
+    public partial string? ErrorMessage { get; set; }
 
     [ObservableProperty]
-    private bool _isFindOpen;
+    public partial bool IsFindOpen { get; set; }
 
     [ObservableProperty]
-    private string _findQuery = string.Empty;
+    public partial string FindQuery { get; set; } = string.Empty;
 
     [ObservableProperty]
-    private bool _findMatchCase;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(FindStatus))]
-    private int _findCount;
+    public partial bool FindMatchCase { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FindStatus))]
-    private int _findIndex;
+    public partial int FindCount { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FindStatus))]
+    public partial int FindIndex { get; set; }
 
     /// <summary>False on pages where the browser's CSS Custom Highlight API is unavailable.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FindStatus))]
-    private bool _findSupported = true;
+    public partial bool FindSupported { get; set; } = true;
 
     [ObservableProperty]
-    private bool _isPermissionPromptOpen;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PermissionPromptText))]
-    private string _permissionOrigin = string.Empty;
+    public partial bool IsPermissionPromptOpen { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(PermissionPromptText))]
-    private SitePermissionKind _permissionKind;
+    public partial string PermissionOrigin { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PermissionPromptText))]
+    public partial SitePermissionKind PermissionKind { get; set; }
 
     /// <summary>
     /// Queued rather than a single slot: a combined camera+microphone request (the common case
@@ -133,13 +133,13 @@ public sealed partial class BrowserTabViewModel : ObservableObject
             ? InternalPages.NewTab
             : InternalPages.Normalize(url);
 
-        _kind = InternalPages.ResolveKind(target);
-        _url = target;
-        _title = InternalPages.Title(_kind);
-        _addressText = UrlHelper.ForDisplay(target);
-        _zoomFactor = AppServices.Settings.Current.DefaultZoomFactor;
+        Kind = InternalPages.ResolveKind(target);
+        Url = target;
+        Title = InternalPages.Title(Kind);
+        AddressText = UrlHelper.ForDisplay(target);
+        ZoomFactor = AppServices.Settings.Current.DefaultZoomFactor;
 
-        if (_kind == BrowserTabKind.Web)
+        if (Kind == BrowserTabKind.Web)
         {
             PendingUrl = InternalPages.ToNavigationTarget(target);
         }
