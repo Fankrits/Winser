@@ -42,6 +42,12 @@ public interface IWebViewHost
     /// <summary>Clears cookies, cache and site data for the whole profile this tab uses.</summary>
     Task ClearBrowsingDataAsync();
 
-    /// <summary>Tears down the underlying browser. Called when the tab goes away for good.</summary>
+    /// <summary>
+    /// Tears down the underlying browser - called both when the tab goes away for good and
+    /// when an idle tab is discarded to free its memory (see
+    /// <see cref="BrowserTabViewModel.TryDiscardAsync"/>). Safe to call again later: a
+    /// subsequent navigation on the same tab creates a fresh browser rather than reusing this
+    /// one, which <see cref="IsReady"/> turning false after this call is what signals.
+    /// </summary>
     void Release();
 }

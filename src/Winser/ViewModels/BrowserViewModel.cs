@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.UI.Xaml;
 using Windows.System;
 using Winser.Helpers;
 using Winser.Models;
@@ -27,7 +28,15 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// <summary>VK_OEM_MINUS.</summary>
     private const VirtualKey MinusKey = (VirtualKey)189;
 
+    /// <summary>
+    /// One per window rather than one per tab: a tab is cheap to check (a DateTimeOffset
+    /// comparison), so paying for a whole timer's worth of overhead per tab just to save
+    /// overhead elsewhere would be backwards.
+    /// </summary>
+    private static readonly TimeSpan IdleSweepInterval = TimeSpan.FromMinutes(1);
+
     private readonly List<ClosedTab> _closedTabs = [];
+    private readonly DispatcherTimer _idleSweepTimer;
 
     private IShellWindow? _window;
     private Task<WebViewProfile>? _profileTask;
@@ -60,6 +69,10 @@ public sealed partial class BrowserViewModel : ObservableObject
         HasActiveDownloads = AppServices.Downloads.HasActiveDownloads;
 
         RebuildBookmarkBar();
+
+        _idleSweepTimer = new DispatcherTimer { Interval = IdleSweepInterval };
+        _idleSweepTimer.Tick += OnIdleSweepTick;
+        _idleSweepTimer.Start();
     }
 
     public bool IsPrivate { get; }
@@ -300,6 +313,9 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     public void Detach()
     {
+        _idleSweepTimer.Stop();
+        _idleSweepTimer.Tick -= OnIdleSweepTick;
+
         AppServices.Bookmarks.Items.CollectionChanged -= OnBookmarksChanged;
         AppServices.Downloads.Items.CollectionChanged -= OnDownloadsChanged;
         AppServices.Downloads.Started -= OnDownloadStarted;
@@ -311,6 +327,33 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
 
         ReleasePrivateProfile();
+    }
+
+    /// <summary>
+    /// Discards a background tab's renderer once it has sat unwatched past the configured
+    /// threshold. A snapshot of <see cref="Tabs"/> rather than a live enumeration: closing this
+    /// window's tabs is a user action that can happen at any time, including while this loop is
+    /// suspended on the await inside TryDiscardAsync, and mutating an ObservableCollection out
+    /// from under an in-progress foreach throws.
+    /// </summary>
+    private async void OnIdleSweepTick(object? sender, object e)
+    {
+        var minutes = AppServices.Settings.Current.DiscardIdleTabsAfterMinutes;
+        if (minutes <= 0)
+        {
+            return;
+        }
+
+        var cutoff = DateTimeOffset.UtcNow.AddMinutes(-minutes);
+        foreach (var tab in Tabs.ToList())
+        {
+            if (ReferenceEquals(tab, SelectedTab) || tab.LastActiveUtc > cutoff)
+            {
+                continue;
+            }
+
+            await tab.TryDiscardAsync();
+        }
     }
 
     /// <summary>Drops the InPrivate data folder once the window's browsers are gone.</summary>

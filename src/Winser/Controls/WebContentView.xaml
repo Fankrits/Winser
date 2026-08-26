@@ -6,7 +6,12 @@
   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
   mc:Ignorable="d">
 
-  <Grid Background="{ThemeResource WinserContentBackgroundBrush}">
-    <WebView2 x:Name="Browser" />
-  </Grid>
+  <!--
+    Deliberately empty: the WebView2 element itself is created and added in code-behind, not
+    declared here. Discarding an idle tab's renderer means calling WebView2.Close() on it, which
+    leaves that specific instance permanently unusable - the only way to show content in this
+    tab again is a brand new WebView2 element, which a XAML-declared, x:Name-bound one cannot be
+    replaced with. See WebContentView.xaml.cs's CreateBrowserElement/Release.
+  -->
+  <Grid x:Name="ContentGrid" Background="{ThemeResource WinserContentBackgroundBrush}" />
 </UserControl>

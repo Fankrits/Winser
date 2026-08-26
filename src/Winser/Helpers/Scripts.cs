@@ -194,4 +194,27 @@ public static class Scripts
           }, { capture: true, passive: false });
         })();
         """;
+
+    /// <summary>
+    /// One-shot check run immediately before discarding an idle tab (see
+    /// <c>BrowserTabViewModel.TryDiscardAsync</c>), not injected persistently like the two
+    /// scripts above. A page exposes no API for "is there unsaved data here" in general, so
+    /// this only looks at the currently focused field - a filled, focused input or textarea is
+    /// the one case actually worth protecting, not a complete audit of the page's state.
+    /// </summary>
+    public const string HasUnsavedFormInput = """
+        (() => {
+          const el = document.activeElement;
+          if (!el) { return false; }
+          const tag = el.tagName;
+          if (tag === 'TEXTAREA') { return el.value.length > 0; }
+          if (tag === 'INPUT') {
+            const type = (el.type || 'text').toLowerCase();
+            const skip = new Set(['button', 'submit', 'reset', 'checkbox', 'radio', 'file', 'image', 'hidden']);
+            return !skip.has(type) && el.value.length > 0;
+          }
+          if (el.isContentEditable) { return el.textContent.trim().length > 0; }
+          return false;
+        })()
+        """;
 }

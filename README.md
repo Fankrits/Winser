@@ -176,13 +176,24 @@ process, and a renderer per site. Nothing in a WinUI shell changes that, and thi
 undercut Edge or Chrome on a single open tab. What it can control is what happens to the tabs
 you are *not* looking at, and that is where nearly all of a browser's memory actually goes.
 
-- **Background tabs are frozen.** `TabView` shows one tab at a time, so switching away unloads
-  the page that was showing; Winser takes that as the cue to call `CoreWebView2.TrySuspendAsync`
-  and drop the tab to `CoreWebView2MemoryUsageTargetLevel.Low`. Chromium freezes the process
-  rather than throwing it away, so switching back resumes it with scroll position, form contents
-  and page state intact. The cost is that a frozen page stops running — a chat or a live
-  dashboard goes quiet until it is on screen again — so it is a setting, and tabs that are
-  audibly playing something are skipped.
+- **Background tabs are frozen immediately.** `TabView` shows one tab at a time, so switching
+  away unloads the page that was showing; Winser takes that as the cue to call
+  `CoreWebView2.TrySuspendAsync` and drop the tab to `CoreWebView2MemoryUsageTargetLevel.Low`.
+  Chromium freezes the process rather than throwing it away, so switching back resumes it with
+  scroll position, form contents and page state intact. The cost is that a frozen page stops
+  running — a chat or a live dashboard goes quiet until it is on screen again — so it is a
+  setting, and tabs that are audibly playing something are skipped.
+- **Background tabs are discarded outright after sitting idle.** A freeze keeps the renderer
+  process around, just quiesced; a discard closes it completely, which is the difference between
+  handing memory *back* and handing *most* of it back. Set in minutes in `winser://settings`
+  (default 30, 0 to never discard), it applies only to a tab that is not selected, is not playing
+  audio, and whose currently focused field does not look like it holds something typed and not
+  yet submitted — the one case a discard could plausibly cost you something you'd notice.
+  Revisiting a discarded tab is a fresh navigation, not a resume: `BrowserTabViewModel.PendingUrl`
+  carries the address across, so it lands back on the same page, just reloaded rather than woken
+  up. The underlying WebView2 element itself is created in code (`WebContentView.CreateBrowserElement`),
+  not declared in XAML, because `WebView2.Close()` leaves that specific instance permanently
+  unusable — a discarded tab gets a brand new element the next time it is shown.
 - **One CoreWebView2 per tab, sharing one environment**, so every tab in a window shares a
   single browser and GPU process rather than starting its own.
 - **No renderer flags.** Most of Chromium's memory switches buy their savings out of security or

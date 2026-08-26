@@ -55,6 +55,15 @@ public sealed class AppSettings
     /// </summary>
     public bool SleepBackgroundTabs { get; set; } = true;
 
+    /// <summary>
+    /// Minutes a background tab may sit unwatched before its renderer is discarded outright,
+    /// freeing its memory completely rather than just freezing it. Revisiting a discarded tab
+    /// is a fresh page load, not a resume - scroll position and anything unsubmitted are lost -
+    /// which is why this is a separate, much coarser setting than
+    /// <see cref="SleepBackgroundTabs"/>. 0 means never discard.
+    /// </summary>
+    public int DiscardIdleTabsAfterMinutes { get; set; } = 30;
+
     public bool EnableDevTools { get; set; } = true;
 
     public bool EnableJavaScript { get; set; } = true;

@@ -92,6 +92,23 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Set(value, Values.SleepBackgroundTabs, v => Values.SleepBackgroundTabs = v);
     }
 
+    public double DiscardIdleTabsAfterMinutes
+    {
+        get => Values.DiscardIdleTabsAfterMinutes;
+        set
+        {
+            if (double.IsNaN(value))
+            {
+                return;
+            }
+
+            Set(
+                (int)Math.Clamp(value, 0, 1440),
+                Values.DiscardIdleTabsAfterMinutes,
+                v => Values.DiscardIdleTabsAfterMinutes = v);
+        }
+    }
+
     public bool EnableJavaScript
     {
         get => Values.EnableJavaScript;

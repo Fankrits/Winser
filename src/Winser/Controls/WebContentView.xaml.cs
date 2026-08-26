@@ -33,10 +33,10 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     private const long ShortcutBurstMs = 1000;
 
+    private WebView2? _browser;
     private CoreWebView2? _core;
     private double _zoomFactor = 1.0;
     private bool _initializing;
-    private bool _released;
     private bool _suspended;
 
     /// <summary>Arrival times of recently accepted shortcut messages; see <see cref="AllowShortcut"/>.</summary>
@@ -68,7 +68,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     // ------------------------------------------------------------------ IWebViewHost
 
-    public bool IsReady => _core is not null && !_released;
+    public bool IsReady => _core is not null;
 
     /// <summary>
     /// Page zoom. The WinUI WebView2 element does not surface CoreWebView2Controller.ZoomFactor
@@ -139,7 +139,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     public void Stop() => _core?.Stop();
 
-    public void FocusContent() => Browser.Focus(FocusState.Programmatic);
+    public void FocusContent() => _browser?.Focus(FocusState.Programmatic);
 
     public void SetMuted(bool muted)
     {
@@ -191,23 +191,37 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         }
     }
 
+    /// <summary>
+    /// Tears the current renderer down. Used both when a tab closes for good and when an idle
+    /// tab is discarded to free its memory (see <see cref="BrowserTabViewModel.TryDiscardAsync"/>)
+    /// - the two cases differ only in whether anything ever calls <see cref="TryInitialize"/>
+    /// again afterwards, not in what teardown itself has to do.
+    /// </summary>
     public void Release()
     {
-        if (_released)
+        if (_browser is not { } browser)
         {
             return;
         }
 
-        _released = true;
         Unhook();
+
+        // Cleared before Close() rather than after: IsReady must read false for the whole
+        // duration of a call that is about to make the underlying CoreWebView2 unusable.
+        _core = null;
+        _browser = null;
 
         try
         {
-            Browser.Close();
+            browser.Close();
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             Debug.WriteLine($"[Winser] WebView2 close failed: {ex.Message}");
+        }
+        finally
+        {
+            ContentGrid.Children.Remove(browser);
         }
     }
 
@@ -220,6 +234,11 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // A tab becomes visible either because the user selected it or because it was just
+        // created selected; either way this is "the tab was looked at just now" for the idle
+        // discard sweep on BrowserViewModel.
+        Tab?.MarkActive();
+
         // Order matters: Resume makes the WebView2 visible again, and TryInitialize refuses to
         // create a CoreWebView2 that cannot be seen. Swap these two and a tab that has never
         // been shown comes back permanently blank.
@@ -269,7 +288,8 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     /// </remarks>
     private async Task SuspendAsync()
     {
-        if (_core is not { } core || _released || !AppServices.Settings.Current.SleepBackgroundTabs)
+        if (_core is not { } core || _browser is not { } browser ||
+            !AppServices.Settings.Current.SleepBackgroundTabs)
         {
             return;
         }
@@ -288,13 +308,13 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
             // WebView2 refuses to freeze a browser it still considers on screen, and an
             // unloaded element is not reliably invisible to it - so say so explicitly.
-            Browser.Visibility = Visibility.Collapsed;
+            browser.Visibility = Visibility.Collapsed;
             _suspended = await core.TrySuspendAsync();
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             Debug.WriteLine($"[Winser] Could not suspend this tab: {ex.Message}");
-            Browser.Visibility = Visibility.Visible;
+            browser.Visibility = Visibility.Visible;
             return;
         }
 
@@ -307,9 +327,12 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     private void Resume()
     {
-        Browser.Visibility = Visibility.Visible;
+        if (_browser is { } browser)
+        {
+            browser.Visibility = Visibility.Visible;
+        }
 
-        if (_core is not { } core || _released)
+        if (_core is not { } core)
         {
             return;
         }
@@ -331,16 +354,20 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     private async Task InitializeAsync()
     {
-        if (_initializing || _core is not null || _released || Tab is null)
+        if (_initializing || _core is not null || Tab is null)
         {
             return;
         }
 
         _initializing = true;
+        // Reuses a still-elementless _browser left over from a previous attempt that threw
+        // below before ever reaching CoreWebView2 (e.g. a first try with no runtime installed),
+        // rather than leaving an orphaned WebView2 behind on every retry.
+        var browser = _browser ??= CreateBrowserElement();
         try
         {
             var profile = await Tab.Shell.GetProfileAsync();
-            await Browser.EnsureCoreWebView2Async(profile.Environment);
+            await browser.EnsureCoreWebView2Async(profile.Environment);
         }
         catch (Exception ex)
         {
@@ -360,7 +387,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             _initializing = false;
         }
 
-        if (_released || Browser.CoreWebView2 is not { } core)
+        if (browser.CoreWebView2 is not { } core)
         {
             return;
         }
@@ -369,6 +396,21 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         await ConfigureAsync(core);
         Hook(core);
         Tab?.AttachHost(this);
+    }
+
+    /// <summary>
+    /// A WebView2 that has had Close() called on it - which every discard does, see
+    /// <see cref="Release"/> - never works again, so a discarded tab being revisited needs a
+    /// brand new element rather than its old one back. Added to <see cref="ContentGrid"/>
+    /// immediately: it must already be in the visual tree, laid out at the control's actual
+    /// size, by the time EnsureCoreWebView2Async runs, for exactly the reason TryInitialize
+    /// waits for a non-zero size in the first place.
+    /// </summary>
+    private WebView2 CreateBrowserElement()
+    {
+        var browser = new WebView2();
+        ContentGrid.Children.Add(browser);
+        return browser;
     }
 
     private async Task ConfigureAsync(CoreWebView2 core)

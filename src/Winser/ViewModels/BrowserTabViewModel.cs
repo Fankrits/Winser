@@ -138,6 +138,7 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         Title = InternalPages.Title(Kind);
         AddressText = UrlHelper.ForDisplay(target);
         ZoomFactor = AppServices.Settings.Current.DefaultZoomFactor;
+        LastActiveUtc = DateTimeOffset.UtcNow;
 
         if (Kind == BrowserTabKind.Web)
         {
@@ -159,6 +160,14 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     /// <summary>Where the host should navigate as soon as CoreWebView2 comes up.</summary>
     public string? PendingUrl { get; private set; }
+
+    /// <summary>
+    /// Stamped by <see cref="MarkActive"/> whenever this tab becomes the one shown. Read by the
+    /// idle-discard sweep on <see cref="Shell"/> to decide how long a background tab has sat
+    /// unwatched; a tab starts its clock from creation, not some ancient default, so a
+    /// just-opened background tab is not instantly eligible.
+    /// </summary>
+    public DateTimeOffset LastActiveUtc { get; private set; }
 
     public ObservableCollection<AddressSuggestion> Suggestions { get; } = [];
 
@@ -334,6 +343,51 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     private sealed record PendingPermission(string Origin, SitePermissionKind Kind, TaskCompletionSource<bool> Completion);
 
     public void RequestAddressFocus() => AddressFocusRequested?.Invoke(this, EventArgs.Empty);
+
+    public void MarkActive() => LastActiveUtc = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Frees this tab's renderer entirely rather than just freezing it (see
+    /// <see cref="AppSettings.SleepBackgroundTabs"/>): a full page unload instead of a
+    /// suspend, so it hands back everything a frozen tab still holds - at the cost that
+    /// revisiting the tab is a fresh navigation, not a resume. Returns whether it actually did.
+    /// </summary>
+    /// <remarks>
+    /// Restricted to a tab currently showing a web page: <see cref="Url"/> is what gets restored
+    /// afterwards, and for a tab sitting on a native page (<c>winser://settings</c> with web
+    /// history underneath, say) <see cref="Url"/> is that native address, not a navigable one -
+    /// discarding that tab's idle renderer would leave nothing sensible for the restore to
+    /// navigate back to. Also skipped for a tab playing audio, and for a tab whose focused field
+    /// looks like it holds something the user typed - the closest a page can be asked, from
+    /// outside it, about unsaved input; see <see cref="Scripts.HasUnsavedFormInput"/>.
+    /// </remarks>
+    public async Task<bool> TryDiscardAsync()
+    {
+        if (!IsWeb || IsAudioPlaying || _host is not { IsReady: true } host)
+        {
+            return false;
+        }
+
+        string hasInput;
+        try
+        {
+            hasInput = await host.ExecuteScriptAsync(Scripts.HasUnsavedFormInput);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            return false;
+        }
+
+        if (hasInput == "true")
+        {
+            return false;
+        }
+
+        PendingUrl = InternalPages.ToNavigationTarget(Url);
+        host.Release();
+        _host = null;
+        return true;
+    }
 
     /// <summary>Pushes changed settings (theme, tracking prevention, ...) into a live page.</summary>
     public void ApplyPreferences() => _host?.ApplyPreferences();

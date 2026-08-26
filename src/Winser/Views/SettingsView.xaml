@@ -297,6 +297,31 @@
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <StackPanel>
+              <TextBlock Text="Discard idle background tabs after" />
+              <TextBlock
+                Opacity="0.6"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="Minutes. Frees a background tab's memory completely instead of just sleeping it - revisiting it afterwards is a fresh page load, not a resume. Set to 0 to never discard."
+                TextWrapping="Wrap" />
+            </StackPanel>
+            <NumberBox
+              Grid.Column="1"
+              Width="140"
+              Maximum="1440"
+              Minimum="0"
+              SpinButtonPlacementMode="Compact"
+              Value="{x:Bind ViewModel.DiscardIdleTabsAfterMinutes, Mode=TwoWay}"
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
               <TextBlock Text="Run JavaScript" />
               <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Takes effect in tabs opened after the change." />
             </StackPanel>
