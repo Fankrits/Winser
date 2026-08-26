@@ -9,18 +9,22 @@
   mc:Ignorable="d">
 
   <!--
-    Temporarily disabled: on at least one real (non-VM) machine, WebView2 rendered nothing
-    at all - not even the New Tab page - while Mica was active, and no amount of resizing or
-    switching tabs recovered it. Removing Mica is the cleanest single-variable test for a
-    known class of Mica/WebView2 compositing conflict. Restore once confirmed innocent, or
-    replace with an explicit theme-colored background if it's confirmed guilty.
+    Disabled from 29d266f to c66e231 while chasing a WebView2 rendering bug: on at least one
+    real (non-VM) machine, WebView2 rendered nothing at all - not even the New Tab page - and
+    no amount of resizing or switching tabs recovered it. That symptom is now explained without
+    Mica - f69ce7d and ffa2811 each fixed a way the browser element could be created against a
+    collapsed or zero-size container, which is exactly "blank, and permanently so" - so Mica was
+    never actually the culprit, just a variable removed at the same time by coincidence of
+    timing. Restored now that the real cause (TabView's default VerticalAlignment="Top", fixed
+    in c66e231) is confirmed on a real machine. If it turns out to still conflict with WebView2
+    on some hardware, revert this one commit - nothing else depends on it being on.
+  -->
   <Window.SystemBackdrop>
     <MicaBackdrop />
   </Window.SystemBackdrop>
-  -->
 
-  <!-- Explicit background: without Mica there is nothing else painting behind the tab strip. -->
-  <Grid x:Name="RootGrid" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+  <!-- Transparent, not unset: lets Mica show through while keeping the whole window hit-testable. -->
+  <Grid x:Name="RootGrid" Background="Transparent">
 
     <!--
       VerticalAlignment is load-bearing, not cosmetic. TabView's own default style sets
