@@ -55,6 +55,12 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     public WebContentView()
     {
         InitializeComponent();
+
+        // Set before anything else can report over it, so that "InitializeAsync was never
+        // entered at all" - no Tab attached, or TryInitialize's gate never passing - reads as
+        // its own distinct state rather than as the blank rectangle it is trying to explain.
+        ReportRendererStatus("Preparing this tab\u2026");
+
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
