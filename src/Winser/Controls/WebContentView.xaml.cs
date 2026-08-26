@@ -224,6 +224,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         }
 
         Unhook();
+        browser.SizeChanged -= OnBrowserSizeChanged;
 
         // Cleared before Close() rather than after: IsReady must read false for the whole
         // duration of a call that is about to make the underlying CoreWebView2 unusable.
@@ -379,57 +380,106 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         }
 
         _initializing = true;
-        // Reuses a still-elementless _browser left over from a previous attempt that threw
-        // below before ever reaching CoreWebView2 (e.g. a first try with no runtime installed),
-        // rather than leaving an orphaned WebView2 behind on every retry.
-        var browser = _browser ??= CreateBrowserElement();
         try
         {
-            var profile = await Tab.Shell.GetProfileAsync();
-            await browser.EnsureCoreWebView2Async(profile.Environment);
-        }
-        catch (Exception ex)
-        {
-            // A tab that cannot start its browser must still render its error state rather
-            // than take the window down with it. The overwhelmingly likely cause is a machine
-            // without the Evergreen runtime, so say that rather than showing an HRESULT.
-            Tab?.ReportNavigationCompleted(
-                false,
-                AppServices.WebView.RuntimeVersion is null
+            // Reuses a still-elementless _browser left over from a previous attempt that threw
+            // below before ever reaching CoreWebView2 (e.g. a first try with no runtime
+            // installed), rather than leaving an orphaned WebView2 behind on every retry.
+            var browser = _browser ??= CreateBrowserElement();
+
+            // Adding a child to a Grid does not lay that child out - measure and arrange happen
+            // on a later pass, and until they do the new element's ActualWidth/ActualHeight are
+            // still zero. TryInitialize's gate above measures *this control*, which has been
+            // laid out for a while; it says nothing about an element created seconds ago. Force
+            // the pass, and if that is somehow not enough, leave: the element's own SizeChanged
+            // brings us straight back here the moment it has real bounds.
+            //
+            // Skipping this is not a subtle inefficiency. A CoreWebView2 created against a
+            // zero-sized element gets a zero-bounds controller, and a zero-bounds controller
+            // never composites a pixel for the rest of its life, however large the element
+            // later becomes.
+            browser.UpdateLayout();
+            if (browser.ActualWidth <= 0 || browser.ActualHeight <= 0)
+            {
+                ReportRendererStatus("Waiting for the page area to be laid out\u2026");
+                return;
+            }
+
+            try
+            {
+                ReportRendererStatus("Starting the browser engine\u2026");
+                var profile = await Tab.Shell.GetProfileAsync();
+                await browser.EnsureCoreWebView2Async(profile.Environment);
+            }
+            catch (Exception ex)
+            {
+                // A tab that cannot start its browser must still render its error state rather
+                // than take the window down with it. The overwhelmingly likely cause is a machine
+                // without the Evergreen runtime, so say that rather than showing an HRESULT.
+                Debug.WriteLine($"[Winser] EnsureCoreWebView2Async failed: {ex}");
+                var message = AppServices.WebView.RuntimeVersion is null
                     ? "The Microsoft Edge WebView2 Runtime is not installed. Winser renders pages " +
                       "with WebView2, so it needs the runtime before it can browse."
-                    : $"WebView2 could not start: {ex.Message}");
-            return;
+                    : $"WebView2 could not start: {ex.Message}";
+                ReportRendererStatus(message);
+                Tab?.ReportNavigationCompleted(false, message);
+                return;
+            }
+
+            if (browser.CoreWebView2 is not { } core)
+            {
+                ReportRendererStatus(
+                    "The browser engine started but handed back no CoreWebView2 for this tab.");
+                return;
+            }
+
+            // Deliberately left set rather than cleared. The WebView2 is on top of this text, so
+            // it is invisible the moment a single frame is painted - which makes it visible in
+            // exactly one situation: the engine is alive and navigating, and still nothing is
+            // reaching the screen. That is a different bug from the engine failing to start, and
+            // without this they look identical from the outside: an empty rectangle.
+            ReportRendererStatus(
+                $"The browser engine is running (WebView2 {AppServices.WebView.RuntimeVersion ?? "version unknown"}) " +
+                "but it is not painting. If you can read this, page content is being rendered somewhere " +
+                "off-screen rather than into this tab.");
+
+            _core = core;
+            await ConfigureAsync(core);
+            Hook(core);
+            Tab?.AttachHost(this);
         }
         finally
         {
             _initializing = false;
         }
-
-        if (browser.CoreWebView2 is not { } core)
-        {
-            return;
-        }
-
-        _core = core;
-        await ConfigureAsync(core);
-        Hook(core);
-        Tab?.AttachHost(this);
     }
 
     /// <summary>
     /// A WebView2 that has had Close() called on it - which every discard does, see
     /// <see cref="Release"/> - never works again, so a discarded tab being revisited needs a
-    /// brand new element rather than its old one back. Added to <see cref="ContentGrid"/>
-    /// immediately: it must already be in the visual tree, laid out at the control's actual
-    /// size, by the time EnsureCoreWebView2Async runs, for exactly the reason TryInitialize
-    /// waits for a non-zero size in the first place.
+    /// brand new element rather than its old one back.
     /// </summary>
     private WebView2 CreateBrowserElement()
     {
         var browser = new WebView2();
+
+        // The retry that makes deferring safe in InitializeAsync: a newly added element is
+        // unlaid-out, and this is what fires once it is not.
+        browser.SizeChanged += OnBrowserSizeChanged;
         ContentGrid.Children.Add(browser);
         return browser;
+    }
+
+    private void OnBrowserSizeChanged(object sender, SizeChangedEventArgs e) => TryInitialize();
+
+    /// <summary>
+    /// Writes the placeholder that sits behind the WebView2 (see WebContentView.xaml). Mirrored
+    /// to the debug output so a build run under a debugger records the same sequence.
+    /// </summary>
+    private void ReportRendererStatus(string status)
+    {
+        Debug.WriteLine($"[Winser] Renderer: {status}");
+        RendererStatus.Text = status;
     }
 
     private async Task ConfigureAsync(CoreWebView2 core)

@@ -13,5 +13,22 @@
     tab again is a brand new WebView2 element, which a XAML-declared, x:Name-bound one cannot be
     replaced with. See WebContentView.xaml.cs's CreateBrowserElement/Release.
   -->
-  <Grid x:Name="ContentGrid" Background="{ThemeResource WinserContentBackgroundBrush}" />
+  <Grid x:Name="ContentGrid" Background="{ThemeResource WinserContentBackgroundBrush}">
+
+    <!--
+      Sits underneath the WebView2, which is added to this Grid after it and therefore paints
+      over it. That is the whole design: this is only ever readable when the renderer is not
+      painting, which is exactly when a flat empty rectangle tells you nothing and a sentence
+      telling you which stage it stopped at tells you everything.
+    -->
+    <TextBlock
+      x:Name="RendererStatus"
+      HorizontalAlignment="Center"
+      MaxWidth="460"
+      Opacity="0.55"
+      Style="{StaticResource CaptionTextBlockStyle}"
+      TextAlignment="Center"
+      TextWrapping="Wrap"
+      VerticalAlignment="Center" />
+  </Grid>
 </UserControl>
