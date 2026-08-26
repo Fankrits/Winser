@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 using Windows.Storage.Pickers;
@@ -418,6 +419,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
                     "Waiting for the page area to be laid out\u2026 " +
                     $"(browser {Describe(browser.ActualWidth, browser.ActualHeight)}, " +
                     $"area {Describe(ContentGrid.ActualWidth, ContentGrid.ActualHeight)})");
+                LogLayoutChain("deferred");
                 return;
             }
 
@@ -463,6 +465,10 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             await ConfigureAsync(core);
             Hook(core);
             Tab?.AttachHost(this);
+
+            // The important one: the browser is alive, so anything still wrong on screen is a
+            // size somewhere in this chain rather than a failure to start.
+            LogLayoutChain("browser ready");
         }
         finally
         {
@@ -502,6 +508,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     private void ReportRendererStatus(string status)
     {
         Debug.WriteLine($"[Winser] Renderer: {status}");
+        DiagnosticLog.Write($"renderer: {status}");
         RendererStatus.Text = status;
     }
 
@@ -512,6 +519,43 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     /// </summary>
     private static string Describe(double width, double height) =>
         $"{width.ToString("0", CultureInfo.InvariantCulture)}\u00d7{height.ToString("0", CultureInfo.InvariantCulture)}";
+
+    /// <summary>
+    /// Records the arranged size of every element between the WebView2 and the window root.
+    /// </summary>
+    /// <remarks>
+    /// The leaf's size on its own cannot tell you whether the browser is sized wrongly or
+    /// sized correctly to a container that is itself wrong - and that distinction has now
+    /// been the difference between the real bug and two plausible wrong answers. The chain
+    /// shows exactly which ancestor stops being the size of the window.
+    /// </remarks>
+    private void LogLayoutChain(string when)
+    {
+        var chain = new System.Text.StringBuilder($"layout [{when}]");
+
+        if (_browser is { } browser)
+        {
+            chain.Append(CultureInfo.InvariantCulture, $" WebView2={Describe(browser.ActualWidth, browser.ActualHeight)}");
+        }
+        else
+        {
+            chain.Append(" WebView2=(none)");
+        }
+
+        DependencyObject? node = this;
+        for (var depth = 0; node is not null && depth < 12; depth++)
+        {
+            if (node is FrameworkElement element)
+            {
+                chain.Append(CultureInfo.InvariantCulture,
+                    $" < {element.GetType().Name}={Describe(element.ActualWidth, element.ActualHeight)}");
+            }
+
+            node = VisualTreeHelper.GetParent(node);
+        }
+
+        DiagnosticLog.Write(chain.ToString());
+    }
 
     private async Task ConfigureAsync(CoreWebView2 core)
     {

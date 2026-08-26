@@ -202,6 +202,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public string DataFolder => AppPaths.Root;
 
+    /// <summary>Named in the UI so a rendering problem can be reported with the log attached.</summary>
+    public string DiagnosticLogDescription => $"Diagnostic log: {DiagnosticLog.Path}";
+
     [RelayCommand]
     private void OpenDataFolder() => SystemShell.OpenFolder(AppPaths.Root);
 
