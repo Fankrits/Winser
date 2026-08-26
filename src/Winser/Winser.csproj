@@ -74,7 +74,25 @@
     <!-- Microsoft.Web.WebView2 comes in transitively with the Windows App SDK, which
          pins the loader version its WebView2 XAML control expects. Do not pin it here. -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
+
+    <!--
+      The Microsoft.WindowsAppSDK meta-package pulls in nine sub-packages; Winser needs five
+      of them. The other four - AI, ML, Search, Widgets - added ~60 MB self-contained (mostly
+      onnxruntime.dll and DirectML.dll, neither of which Winser's code ever touches) for
+      on-device AI features and OS search integration nothing here uses. Checked each of these
+      five sub-packages' own dependency lists first: none of them reaches back into AI, ML,
+      Search or Widgets, so this is not fighting a transitive pull - the unused weight was
+      coming from the meta-package's own top-level dependency list, nothing deeper.
+      Runtime is kept: unlike the meta-package (whose own build/buildTransitive targets are
+      empty, just two ProjectCapability markers), Runtime's targets set up the AppX/component
+      references WindowsAppSDKSelfContained relies on to bundle the native runtime.
+    -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="2.0.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.6" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="2.1.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.4.0" />
   </ItemGroup>
 
 </Project>
