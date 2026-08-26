@@ -72,10 +72,20 @@
 
       <TabView.TabItemTemplate>
         <DataTemplate x:DataType="vm:BrowserTabViewModel">
+          <!--
+            The two alignments are load-bearing, not cosmetic. TabViewItem derives from
+            ListViewItem, which aligns its content Top/Left rather than stretching it, so
+            without these the page is handed its *desired* height instead of the tab's
+            available one - a toolbar and a minimal content row, pinned to the top, with the
+            rest of the window empty beneath it. The WebView2 then fills that faithfully and
+            the page renders into a band a few dozen pixels tall.
+          -->
           <TabViewItem
             Header="{x:Bind Title, Mode=OneWay}"
+            HorizontalContentAlignment="Stretch"
             IconSource="{x:Bind TabIcon, Mode=OneWay}"
-            ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
+            ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}"
+            VerticalContentAlignment="Stretch">
 
             <TabViewItem.ContextFlyout>
               <MenuFlyout>

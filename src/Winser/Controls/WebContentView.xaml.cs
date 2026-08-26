@@ -414,7 +414,10 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
                 browser.ActualWidth + tolerance < ContentGrid.ActualWidth ||
                 browser.ActualHeight + tolerance < ContentGrid.ActualHeight)
             {
-                ReportRendererStatus("Waiting for the page area to be laid out\u2026");
+                ReportRendererStatus(
+                    "Waiting for the page area to be laid out\u2026 " +
+                    $"(browser {Describe(browser.ActualWidth, browser.ActualHeight)}, " +
+                    $"area {Describe(ContentGrid.ActualWidth, ContentGrid.ActualHeight)})");
                 return;
             }
 
@@ -454,7 +457,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             ReportRendererStatus(
                 $"The browser engine is running (WebView2 {AppServices.WebView.RuntimeVersion ?? "version unknown"}) " +
                 "but it is not painting. If you can read this, page content is being rendered somewhere " +
-                "off-screen rather than into this tab.");
+                $"off-screen rather than into this tab. Page area {Describe(ContentGrid.ActualWidth, ContentGrid.ActualHeight)}.");
 
             _core = core;
             await ConfigureAsync(core);
@@ -501,6 +504,14 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         Debug.WriteLine($"[Winser] Renderer: {status}");
         RendererStatus.Text = status;
     }
+
+    /// <summary>
+    /// Sizes are quoted in the status text because the page being painted into the wrong
+    /// *area* looks identical, from a screenshot, to it being painted wrongly into the right
+    /// one - and the numbers separate the two immediately.
+    /// </summary>
+    private static string Describe(double width, double height) =>
+        $"{width.ToString("0", CultureInfo.InvariantCulture)}\u00d7{height.ToString("0", CultureInfo.InvariantCulture)}";
 
     private async Task ConfigureAsync(CoreWebView2 core)
     {
