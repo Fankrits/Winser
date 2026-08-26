@@ -107,6 +107,24 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FindStatus))]
     private bool _findSupported = true;
 
+    [ObservableProperty]
+    private bool _isPermissionPromptOpen;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PermissionPromptText))]
+    private string _permissionOrigin = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PermissionPromptText))]
+    private SitePermissionKind _permissionKind;
+
+    /// <summary>
+    /// Queued rather than a single slot: a combined camera+microphone request (the common case
+    /// for a video call site) arrives as two separate PermissionRequested events back to back,
+    /// and the second must not silently discard the first.
+    /// </summary>
+    private readonly Queue<PendingPermission> _permissionQueue = new();
+
     public BrowserTabViewModel(BrowserViewModel shell, string? url = null)
     {
         _shell = shell;
@@ -207,6 +225,28 @@ public sealed partial class BrowserTabViewModel : ObservableObject
             ? string.IsNullOrEmpty(FindQuery) ? string.Empty : "No results"
             : $"{FindIndex}/{FindCount}";
 
+    /// <summary>
+    /// <see cref="PermissionOrigin"/> is the full origin (used as the storage key, so http and
+    /// https or two different ports are never conflated); this trims it to a host for display,
+    /// the same way the security chip does.
+    /// </summary>
+    public string PermissionPromptText
+    {
+        get
+        {
+            var host = UrlHelper.HostLabel(PermissionOrigin);
+            return PermissionKind switch
+            {
+                SitePermissionKind.Camera => $"{host} wants to use your camera",
+                SitePermissionKind.Microphone => $"{host} wants to use your microphone",
+                SitePermissionKind.Geolocation => $"{host} wants to know your location",
+                SitePermissionKind.Notifications => $"{host} wants to show notifications",
+                SitePermissionKind.ClipboardRead => $"{host} wants to see what's on your clipboard",
+                _ => string.Empty,
+            };
+        }
+    }
+
     // ---------------------------------------------------------------- host wiring
 
     public void AttachHost(IWebViewHost host)
@@ -229,7 +269,69 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     {
         _host?.Release();
         _host = null;
+
+        // A tab that goes away mid-prompt (closed, window torn down) must still resolve every
+        // deferral WebView2 is holding open, or those CoreWebView2 events never complete.
+        while (_permissionQueue.Count > 0)
+        {
+            _permissionQueue.Dequeue().Completion.TrySetResult(false);
+        }
+
+        IsPermissionPromptOpen = false;
     }
+
+    /// <summary>
+    /// Asks the user whether <paramref name="origin"/> may use <paramref name="kind"/>,
+    /// surfacing an inline prompt the same way the find bar surfaces over the page. Requests
+    /// queue rather than replace one another, so a combined camera+microphone request - two
+    /// separate PermissionRequested events, back to back - shows as two prompts in turn instead
+    /// of the second silently discarding the first.
+    /// </summary>
+    public Task<bool> RequestPermissionAsync(string origin, SitePermissionKind kind)
+    {
+        var tcs = new TaskCompletionSource<bool>();
+        _permissionQueue.Enqueue(new PendingPermission(origin, kind, tcs));
+
+        if (_permissionQueue.Count == 1)
+        {
+            ShowNextPermissionPrompt();
+        }
+
+        return tcs.Task;
+    }
+
+    [RelayCommand]
+    private void AllowPermission() => CompletePermissionPrompt(true);
+
+    [RelayCommand]
+    private void DenyPermission() => CompletePermissionPrompt(false);
+
+    private void CompletePermissionPrompt(bool allow)
+    {
+        if (_permissionQueue.Count == 0)
+        {
+            return;
+        }
+
+        _permissionQueue.Dequeue().Completion.TrySetResult(allow);
+        ShowNextPermissionPrompt();
+    }
+
+    private void ShowNextPermissionPrompt()
+    {
+        if (_permissionQueue.Count == 0)
+        {
+            IsPermissionPromptOpen = false;
+            return;
+        }
+
+        var next = _permissionQueue.Peek();
+        PermissionOrigin = next.Origin;
+        PermissionKind = next.Kind;
+        IsPermissionPromptOpen = true;
+    }
+
+    private sealed record PendingPermission(string Origin, SitePermissionKind Kind, TaskCompletionSource<bool> Completion);
 
     public void RequestAddressFocus() => AddressFocusRequested?.Invoke(this, EventArgs.Empty);
 

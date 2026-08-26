@@ -46,6 +46,19 @@ public static partial class UrlHelper
     public static bool IsWebRequestable(string? url) =>
         Uri.TryCreate(url, UriKind.Absolute, out var uri) && WebRequestableSchemes.Contains(uri.Scheme);
 
+    /// <summary>
+    /// True when a URL is safe to reopen from persisted state (session restore, reopened-tab
+    /// history) without the scrutiny a freshly typed address gets. Internal pages and anything
+    /// on the general navigable scheme list qualify - deliberately wider than
+    /// <see cref="IsWebRequestable"/>, since restoring a file:// tab the user themselves had
+    /// open is normal, not a page asking for something. This exists so a corrupted or tampered
+    /// session.json cannot hand a tab a scheme nobody ever chose.
+    /// </summary>
+    public static bool IsRestorable(string? url) =>
+        !string.IsNullOrWhiteSpace(url) &&
+        (InternalPages.IsInternal(url) ||
+         (Uri.TryCreate(url, UriKind.Absolute, out var uri) && NavigableSchemes.Contains(uri.Scheme)));
+
     /// <summary>host[:port][/path] — a dotted name, a bracketed IPv6 literal, or bare "localhost".</summary>
     [GeneratedRegex(
         @"^(?:\[[0-9A-Fa-f:]+\]|[\w\-]+(?:\.[\w\-]+)+|localhost)(?::\d{1,5})?(?:[/?#].*)?$",

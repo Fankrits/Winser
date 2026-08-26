@@ -42,6 +42,16 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     /// <summary>Arrival times of recently accepted shortcut messages; see <see cref="AllowShortcut"/>.</summary>
     private readonly Queue<long> _shortcutTimes = new();
 
+    /// <summary>
+    /// How many script dialogs (alert/confirm/prompt) a page may show per navigation before
+    /// Winser starts dismissing them unseen. A real page needs at most one or two; a script
+    /// stuck in a loop calling alert() otherwise blocks the tab - and the shell's own UI -
+    /// indefinitely, since each dialog is modal.
+    /// </summary>
+    private const int MaxScriptDialogsPerNavigation = 10;
+
+    private int _scriptDialogCount;
+
     public WebContentView()
     {
         InitializeComponent();
@@ -372,6 +382,14 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.Settings.IsPinchZoomEnabled = false;
         // Winser draws its own link preview, so the built-in one would just double up.
         core.Settings.IsStatusBarEnabled = false;
+        // The injected shortcut bridge (Scripts.ShortcutBridge) is what actually forwards
+        // Ctrl+T/Ctrl+W/etc. to the shell, because WinUI accelerators never fire while WebView2
+        // holds focus. Leaving WebView2's own browser accelerators on as well means the same
+        // keypress could be handled twice; this keeps the bridge the single path.
+        core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+        // On by default in WebView2; set explicitly so SmartScreen's reputation check cannot
+        // be silently off because nobody wrote it down.
+        core.Settings.IsReputationCheckingRequired = true;
 
         ApplyPreferences();
 
@@ -405,6 +423,8 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         var settings = AppServices.Settings.Current;
         core.Settings.AreDevToolsEnabled = settings.EnableDevTools;
         core.Settings.IsScriptEnabled = settings.EnableJavaScript;
+        core.Settings.IsGeneralAutofillEnabled = settings.EnableAutofill;
+        core.Settings.IsPasswordAutosaveEnabled = settings.EnableAutofill;
 
         try
         {
@@ -456,6 +476,8 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.DocumentTitleChanged += OnDocumentTitleChanged;
         core.FaviconChanged += OnFaviconChanged;
         core.NewWindowRequested += OnNewWindowRequested;
+        core.PermissionRequested += OnPermissionRequested;
+        core.ScriptDialogOpening += OnScriptDialogOpening;
         core.WindowCloseRequested += OnWindowCloseRequested;
         core.ContainsFullScreenElementChanged += OnFullScreenElementChanged;
         core.DownloadStarting += OnDownloadStarting;
@@ -481,6 +503,8 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         core.DocumentTitleChanged -= OnDocumentTitleChanged;
         core.FaviconChanged -= OnFaviconChanged;
         core.NewWindowRequested -= OnNewWindowRequested;
+        core.PermissionRequested -= OnPermissionRequested;
+        core.ScriptDialogOpening -= OnScriptDialogOpening;
         core.WindowCloseRequested -= OnWindowCloseRequested;
         core.ContainsFullScreenElementChanged -= OnFullScreenElementChanged;
         core.DownloadStarting -= OnDownloadStarting;
@@ -495,8 +519,11 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
 
     // ----------------------------------------------------------------- core events
 
-    private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs e) =>
+    private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        _scriptDialogCount = 0;
         Tab?.ReportNavigationStarting(e.Uri);
+    }
 
     private void OnSourceChanged(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs e) =>
         Tab?.ReportSourceChanged(sender.Source);
@@ -567,6 +594,80 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         Tab.Shell.OpenInNewTab(e.Uri, background: !e.IsUserInitiated);
     }
 
+    /// <summary>
+    /// Mediates camera/microphone/geolocation/notifications/clipboard-read so Winser can
+    /// remember the decision and let it be revoked later, instead of leaving it entirely to
+    /// WebView2's own one-shot prompt.
+    /// </summary>
+    private async void OnPermissionRequested(CoreWebView2 sender, CoreWebView2PermissionRequestedEventArgs e)
+    {
+        if (MapPermissionKind(e.PermissionKind) is not { } kind)
+        {
+            // A kind Winser has no UI for (autoplay, local fonts, ...) - leave it to WebView2's
+            // own default rather than mediating something it cannot explain or let you revoke.
+            return;
+        }
+
+        e.Handled = true;
+
+        if (Tab is not { } tab || tab.IsPrivate)
+        {
+            // An ephemeral profile that could still hand out the camera would not really be
+            // private, so InPrivate windows deny these outright rather than prompting.
+            e.State = CoreWebView2PermissionState.Deny;
+            return;
+        }
+
+        var origin = UrlHelper.OriginKey(e.Uri);
+        if (AppServices.Permissions.TryGet(origin, kind) is { } remembered)
+        {
+            e.State = remembered == SitePermissionState.Allow
+                ? CoreWebView2PermissionState.Allow
+                : CoreWebView2PermissionState.Deny;
+            return;
+        }
+
+        var deferral = e.GetDeferral();
+        try
+        {
+            var allow = await tab.RequestPermissionAsync(origin, kind);
+            AppServices.Permissions.Set(
+                origin, kind, allow ? SitePermissionState.Allow : SitePermissionState.Deny);
+            e.State = allow ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+        }
+        finally
+        {
+            deferral.Complete();
+        }
+    }
+
+    private static SitePermissionKind? MapPermissionKind(CoreWebView2PermissionKind kind) => kind switch
+    {
+        CoreWebView2PermissionKind.Camera => SitePermissionKind.Camera,
+        CoreWebView2PermissionKind.Microphone => SitePermissionKind.Microphone,
+        CoreWebView2PermissionKind.Geolocation => SitePermissionKind.Geolocation,
+        CoreWebView2PermissionKind.Notifications => SitePermissionKind.Notifications,
+        CoreWebView2PermissionKind.ClipboardRead => SitePermissionKind.ClipboardRead,
+        _ => null,
+    };
+
+    /// <summary>
+    /// Lets ordinary alert/confirm/prompt dialogs show normally, but stops answering once a
+    /// page has shown more than <see cref="MaxScriptDialogsPerNavigation"/> on the same
+    /// navigation. Taking the deferral and completing it without calling Accept() resolves the
+    /// dialog exactly as if the user closed it without answering - no UI, no page hang.
+    /// </summary>
+    private void OnScriptDialogOpening(CoreWebView2 sender, CoreWebView2ScriptDialogOpeningEventArgs e)
+    {
+        if (++_scriptDialogCount <= MaxScriptDialogsPerNavigation)
+        {
+            return;
+        }
+
+        var deferral = e.GetDeferral();
+        deferral.Complete();
+    }
+
     private void OnWindowCloseRequested(CoreWebView2 sender, object args)
     {
         if (Tab is { } tab)
@@ -582,6 +683,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     {
         // Winser shows downloads in its own flyout and downloads page.
         e.Handled = true;
+        var isPrivate = Tab?.IsPrivate ?? false;
 
         if (AppServices.Settings.Current.AskWhereToSaveDownloads)
         {
@@ -598,7 +700,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
                 }
 
                 e.ResultFilePath = chosen;
-                AppServices.Downloads.Track(e.DownloadOperation);
+                AppServices.Downloads.Track(e.DownloadOperation, isPrivate);
             }
             finally
             {
@@ -608,7 +710,7 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             return;
         }
 
-        AppServices.Downloads.Track(e.DownloadOperation);
+        AppServices.Downloads.Track(e.DownloadOperation, isPrivate);
     }
 
     private void OnStatusBarTextChanged(CoreWebView2 sender, object args) =>

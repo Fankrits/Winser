@@ -242,7 +242,13 @@ public sealed partial class BrowserViewModel : ObservableObject
             var state = AppServices.Session.State;
             foreach (var tab in state.Tabs)
             {
-                NewTab(tab.Url, select: false);
+                // session.json is Winser's own file, but it is still a file on disk: validate
+                // before trusting it the same way a freshly typed address would not skip
+                // scheme checks just because it looks well-formed.
+                if (UrlHelper.IsRestorable(tab.Url))
+                {
+                    NewTab(tab.Url, select: false);
+                }
             }
 
             if (Tabs.Count > 0)

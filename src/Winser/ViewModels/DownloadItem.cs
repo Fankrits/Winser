@@ -40,9 +40,11 @@ public sealed partial class DownloadItem : ObservableObject
     [NotifyPropertyChangedFor(nameof(StatusText))]
     private bool _isPaused;
 
-    public DownloadItem(DownloadRecord record, CoreWebView2DownloadOperation? operation, Action onChanged)
+    public DownloadItem(
+        DownloadRecord record, CoreWebView2DownloadOperation? operation, Action onChanged, bool isPrivate = false)
     {
         Record = record;
+        IsPrivate = isPrivate;
         _onChanged = onChanged;
         _receivedBytes = record.ReceivedBytes;
         _totalBytes = record.TotalBytes;
@@ -55,6 +57,13 @@ public sealed partial class DownloadItem : ObservableObject
     }
 
     public DownloadRecord Record { get; }
+
+    /// <summary>
+    /// True for a download started from an InPrivate window. Kept on the view model rather
+    /// than <see cref="DownloadRecord"/> so it can never round-trip into downloads.json - an
+    /// InPrivate download should outlive its window no more than InPrivate browsing history does.
+    /// </summary>
+    public bool IsPrivate { get; }
 
     public string FileName => Record.FileName;
 

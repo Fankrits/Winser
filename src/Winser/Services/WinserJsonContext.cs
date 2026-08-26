@@ -17,4 +17,5 @@ namespace Winser.Services;
 [JsonSerializable(typeof(List<HistoryEntry>))]
 [JsonSerializable(typeof(List<DownloadRecord>))]
 [JsonSerializable(typeof(List<TopSite>))]
+[JsonSerializable(typeof(List<SitePermission>))]
 public sealed partial class WinserJsonContext : JsonSerializerContext;

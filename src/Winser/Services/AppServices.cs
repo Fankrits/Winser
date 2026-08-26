@@ -12,6 +12,7 @@ public static class AppServices
     private static DownloadService? _downloads;
     private static SessionService? _session;
     private static WebViewService? _webView;
+    private static SitePermissionService? _permissions;
 
     public static SettingsService Settings => _settings ??= new SettingsService();
 
@@ -25,6 +26,8 @@ public static class AppServices
 
     public static WebViewService WebView => _webView ??= new WebViewService();
 
+    public static SitePermissionService Permissions => _permissions ??= new SitePermissionService();
+
     /// <summary>Forces eager construction so the first window does not pay the load cost.</summary>
     public static void Initialize()
     {
@@ -35,6 +38,7 @@ public static class AppServices
         _ = Downloads;
         _ = Session;
         _ = WebView;
+        _ = Permissions;
     }
 
     /// <summary>Flushes every pending write. Called from App.Exit.</summary>
@@ -46,6 +50,7 @@ public static class AppServices
         }
 
         _session?.Dispose();
+        _permissions?.Dispose();
         _downloads?.Dispose();
         _bookmarks?.Dispose();
         _history?.Dispose();

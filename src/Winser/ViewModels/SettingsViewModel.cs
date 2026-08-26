@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -102,6 +103,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         get => Values.EnableDevTools;
         set => Set(value, Values.EnableDevTools, v => Values.EnableDevTools = v);
     }
+
+    public bool EnableAutofill
+    {
+        get => Values.EnableAutofill;
+        set => Set(value, Values.EnableAutofill, v => Values.EnableAutofill = v);
+    }
+
+    /// <summary>Sites with a remembered camera/microphone/location/notification/clipboard decision.</summary>
+    public ObservableCollection<SitePermission> GrantedPermissions =>
+        AppServices.Permissions.Items;
 
     public bool AskWhereToSaveDownloads
     {

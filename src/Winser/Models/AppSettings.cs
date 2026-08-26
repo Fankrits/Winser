@@ -59,6 +59,13 @@ public sealed class AppSettings
 
     public bool EnableJavaScript { get; set; } = true;
 
+    /// <summary>
+    /// Let WebView2 remember and suggest form field values and passwords. On by default, the
+    /// same as every other browser out of the box - but explicit and switchable here, rather
+    /// than silently on with no UI to see or turn it off.
+    /// </summary>
+    public bool EnableAutofill { get; set; } = true;
+
     public bool EnableStatusBar { get; set; } = true;
 
     public bool AskWhereToSaveDownloads { get; set; }

@@ -328,6 +328,78 @@
           </Grid>
         </Border>
 
+        <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+          <Grid ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+              <TextBlock Text="Save and suggest form data" />
+              <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Autofill for addresses, cards and saved passwords." />
+            </StackPanel>
+            <ToggleSwitch
+              Grid.Column="1"
+              IsOn="{x:Bind ViewModel.EnableAutofill, Mode=TwoWay}"
+              OffContent=""
+              OnContent=""
+              VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+
+        <!--  Permissions  -->
+        <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="Site permissions" />
+        <Border Style="{StaticResource SettingsCardStyle}">
+          <StackPanel Spacing="4">
+            <TextBlock
+              Opacity="0.6"
+              Style="{StaticResource CaptionTextBlockStyle}"
+              Text="Camera, microphone, location, notifications and clipboard decisions Winser has remembered."
+              TextWrapping="Wrap"
+              Visibility="{x:Bind ViewModel.GrantedPermissions.Count, Mode=OneWay, Converter={StaticResource EmptyToVisibility}}" />
+            <TextBlock
+              Opacity="0.6"
+              Style="{StaticResource CaptionTextBlockStyle}"
+              Text="No sites have asked for a permission yet."
+              Visibility="{x:Bind ViewModel.GrantedPermissions.Count, Mode=OneWay, Converter={StaticResource EmptyToVisibility}, ConverterParameter=Invert}" />
+            <ItemsControl ItemsSource="{x:Bind ViewModel.GrantedPermissions, Mode=OneWay}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:SitePermission">
+                  <Grid Padding="0,6" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                      Text="{x:Bind HostLabel}"
+                      TextTrimming="CharacterEllipsis"
+                      VerticalAlignment="Center" />
+                    <TextBlock
+                      Grid.Column="1"
+                      Opacity="0.6"
+                      Style="{StaticResource CaptionTextBlockStyle}"
+                      Text="{x:Bind KindLabel}"
+                      VerticalAlignment="Center" />
+                    <TextBlock
+                      Grid.Column="2"
+                      Opacity="0.6"
+                      Style="{StaticResource CaptionTextBlockStyle}"
+                      Text="{x:Bind StateLabel}"
+                      VerticalAlignment="Center" />
+                    <Button
+                      Grid.Column="3"
+                      Click="OnForgetPermission"
+                      Content="Forget"
+                      VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
         <!--  About  -->
         <TextBlock Style="{StaticResource SectionHeaderTextStyle}" Text="About Winser" />
         <Border Style="{StaticResource SettingsCardStyle}">

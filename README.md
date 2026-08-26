@@ -190,6 +190,7 @@ Everything lives under `%LOCALAPPDATA%\Winser`:
 | `Data\bookmarks.json` | Bookmarks |
 | `Data\history.json` | Browsing history |
 | `Data\downloads.json` | Download list (not the files) |
+| `Data\permissions.json` | Remembered camera/microphone/location/notification/clipboard decisions |
 | `Data\session.json` | Open tabs and window placement |
 | `Profile\` | The WebView2 user data folder: cookies, cache, storage |
 | `Private\` | Throwaway InPrivate profiles, deleted when their window closes |
@@ -247,6 +248,31 @@ So `WebContentView` splits them by what they can do:
 `window.open` gets the same scheme check before it becomes a tab, and the `assets.winser`
 virtual host is mapped `DenyCors` so no site can read the app's own files out of it.
 
+**Permissions are mediated, not left to WebView2's own prompt.** Camera, microphone,
+geolocation, notifications and clipboard-read go through Winser's own inline prompt (the same
+overlay pattern as the find bar), and the decision is remembered per origin in
+`Data\permissions.json` — listed and revocable from `winser://settings`. InPrivate windows deny
+all of these outright rather than prompting, since a profile that could still hand out the
+camera would not really be private. Everything else WebView2 can ask for (autoplay, local
+fonts, window management, ...) is left to its own default, since Winser has no UI yet to explain
+or revoke it.
+
+**A page cannot wedge the tab open with dialogs.** `alert`/`confirm`/`prompt` show normally, but
+past ten on the same navigation `WebContentView` starts dismissing them unseen — taking the
+`ScriptDialogOpening` deferral and completing it without calling `Accept()`, which resolves the
+dialog exactly as if it were closed unanswered. A script cannot use a modal loop to freeze the
+tab.
+
+**Restored tabs go through the same scheme check as a typed address.** `session.json` is
+Winser's own file, but it is still a file on disk; `UrlHelper.IsRestorable` keeps a corrupted or
+tampered copy from handing a tab a scheme nobody chose, the same way `IsWebRequestable` keeps a
+page from doing it over `postMessage`.
+
+`AreBrowserAcceleratorKeysEnabled` is off, so the injected bridge is the *only* path a shortcut
+takes rather than a second, invisible one inside WebView2 itself; `IsReputationCheckingRequired`
+(SmartScreen) is set explicitly rather than left to whatever WebView2 defaults to; and autofill
+has its own settings toggle instead of being silently on with nothing to see or turn it off.
+
 ## Known limitations
 
 - Popups opened with `window.open` become tabs but lose their `window.opener` back-reference,
@@ -260,6 +286,11 @@ virtual host is mapped `DenyCors` so no site can read the app's own files out of
 - Tab drag-and-drop between windows is not implemented — reordering within a window is.
 - Only the empty strip to the right of the tabs is a window drag region, which is the limit of
   what `Window.SetTitleBar` accepts.
+- `DownloadService` is one list shared by every window. An InPrivate download never reaches
+  `downloads.json` and disappears once removed from the list, but while its window is still
+  open it is live in every other window's downloads flyout too, not just its own — scoping
+  downloads per window the way `WebViewService` already scopes profiles per window would fix
+  this, but is a larger change than the audit that found the gap.
 
 ## License
 

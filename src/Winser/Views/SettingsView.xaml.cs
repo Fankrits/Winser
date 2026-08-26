@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
+using Winser.Models;
 using Winser.Services;
 using Winser.ViewModels;
 
@@ -23,6 +24,14 @@ public sealed partial class SettingsView : UserControl
     {
         get => (BrowserTabViewModel?)GetValue(TabProperty);
         set => SetValue(TabProperty, value);
+    }
+
+    private void OnForgetPermission(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is SitePermission permission)
+        {
+            AppServices.Permissions.Revoke(permission);
+        }
     }
 
     private async void OnChooseDownloadFolder(object sender, RoutedEventArgs e)

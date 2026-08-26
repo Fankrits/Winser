@@ -35,7 +35,12 @@ public sealed class DownloadService : IDisposable
 
     public bool HasActiveDownloads => Items.Any(i => i.IsInProgress);
 
-    public DownloadItem Track(CoreWebView2DownloadOperation operation)
+    /// <summary>
+    /// <paramref name="isPrivate"/> keeps the download visible in this session's list without
+    /// ever writing it to downloads.json - an InPrivate download should not outlive its window
+    /// any more than InPrivate history does.
+    /// </summary>
+    public DownloadItem Track(CoreWebView2DownloadOperation operation, bool isPrivate = false)
     {
         var record = new DownloadRecord
         {
@@ -46,7 +51,7 @@ public sealed class DownloadService : IDisposable
             State = DownloadState.InProgress,
         };
 
-        var item = new DownloadItem(record, operation, Persist);
+        var item = new DownloadItem(record, operation, Persist, isPrivate);
         Items.Insert(0, item);
         Persist();
         Started?.Invoke(this, item);
@@ -75,5 +80,5 @@ public sealed class DownloadService : IDisposable
 
     public void Dispose() => _store.Dispose();
 
-    private void Persist() => _store.Save([.. Items.Select(i => i.Record)]);
+    private void Persist() => _store.Save([.. Items.Where(i => !i.IsPrivate).Select(i => i.Record)]);
 }

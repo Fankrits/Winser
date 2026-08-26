@@ -516,6 +516,37 @@
         </StackPanel>
       </Grid>
 
+      <!--  Camera / microphone / location / notifications / clipboard.  -->
+      <Border
+        x:Name="PermissionBar"
+        Margin="0,10,0,0"
+        Padding="12,8"
+        HorizontalAlignment="Center"
+        VerticalAlignment="Top"
+        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="8"
+        x:Load="{x:Bind ViewModel.IsPermissionPromptOpen, Mode=OneWay}">
+        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <FontIcon FontSize="16" Glyph="&#xE72E;" VerticalAlignment="Center" />
+          <TextBlock
+            MaxWidth="320"
+            Text="{x:Bind ViewModel.PermissionPromptText, Mode=OneWay}"
+            TextWrapping="Wrap"
+            VerticalAlignment="Center" />
+          <Button
+            Command="{x:Bind ViewModel.DenyPermissionCommand}"
+            Content="Block"
+            VerticalAlignment="Center" />
+          <Button
+            Command="{x:Bind ViewModel.AllowPermissionCommand}"
+            Content="Allow"
+            Style="{StaticResource AccentButtonStyle}"
+            VerticalAlignment="Center" />
+        </StackPanel>
+      </Border>
+
       <!--  Find on page.  -->
       <Border
         x:Name="FindBar"
