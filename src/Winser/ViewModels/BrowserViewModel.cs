@@ -352,7 +352,14 @@ public sealed partial class BrowserViewModel : ObservableObject
     private async void OnIdleSweepTick(object? sender, object e)
     {
         var minutes = AppServices.Settings.Current.DiscardIdleTabsAfterMinutes;
-        if (minutes <= 0)
+
+        // Downloads aren't tracked per tab (DownloadRecord has no owning-tab reference), so the
+        // precise rule - never discard the tab a running download belongs to - isn't something
+        // this sweep can check. Skipping the whole window while any download is active is the
+        // coarser rule the data model actually supports, and it fails on the safe side: a few
+        // extra idle tabs stay resident for the minutes a download takes, rather than risking a
+        // renderer closing under a transfer that turns out to depend on it.
+        if (minutes <= 0 || HasActiveDownloads)
         {
             return;
         }

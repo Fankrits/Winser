@@ -82,7 +82,7 @@ jobs:
           -r win-x64
           -o publish/self-contained
 
-      # The documented alternative: same app, but leaning on a .NET 8 Desktop Runtime and a
+      # The documented alternative: same app, but leaning on a .NET 10 Desktop Runtime and a
       # Windows App SDK runtime already installed on the machine. Measured next to the shipped
       # shape so the README can quote what that trade actually buys rather than guessing.
       - name: Publish (framework-dependent)
@@ -94,6 +94,15 @@ jobs:
           -p:SelfContained=false
           -p:WindowsAppSDKSelfContained=false
           -o publish/framework-dependent
+
+      # The lean shape has no other distribution path - release.yml only ships the
+      # self-contained MSIX - so this is the one place anyone who can meet its two runtime
+      # prerequisites (the .NET 10 Desktop Runtime and Windows App SDK runtime) can get it.
+      - name: Upload framework-dependent build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Winser-framework-dependent-x64
+          path: publish/framework-dependent
 
       - name: Report
         shell: pwsh
