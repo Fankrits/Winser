@@ -393,19 +393,26 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
             // installed), rather than leaving an orphaned WebView2 behind on every retry.
             var browser = _browser ??= CreateBrowserElement();
 
-            // Adding a child to a Grid does not lay that child out - measure and arrange happen
-            // on a later pass, and until they do the new element's ActualWidth/ActualHeight are
-            // still zero. TryInitialize's gate above measures *this control*, which has been
-            // laid out for a while; it says nothing about an element created seconds ago. Force
-            // the pass, and if that is somehow not enough, leave: the element's own SizeChanged
-            // brings us straight back here the moment it has real bounds.
+            // Whatever bounds the element has when CoreWebView2 is created are the bounds the
+            // page is painted into from then on, so this waits for an arrangement that is
+            // actually finished rather than one that merely exists.
             //
-            // Skipping this is not a subtle inefficiency. A CoreWebView2 created against a
-            // zero-sized element gets a zero-bounds controller, and a zero-bounds controller
-            // never composites a pixel for the rest of its life, however large the element
-            // later becomes.
-            browser.UpdateLayout();
-            if (browser.ActualWidth <= 0 || browser.ActualHeight <= 0)
+            // "Non-zero" is not the test. Adding a child to a Grid does not lay it out, and
+            // forcing the pass with UpdateLayout() only runs whatever arrangement is possible
+            // at that instant - which mid-sequence is a real but partial one, typically full
+            // width before the height resolves. A core created against that renders the page
+            // into a band the size of the element's momentary self and keeps doing so.
+            //
+            // A stretched child of a single-cell Grid ends up exactly the size of that Grid
+            // once layout has settled, so that equality is the signal that it has. Until then,
+            // leave: the element's own SizeChanged returns here when its size next changes.
+            // Both halves matter. The fill check alone would pass a zero-sized element against
+            // a zero-sized Grid; the non-zero check alone is what let a partial arrangement
+            // through in the first place.
+            const double tolerance = 0.5;
+            if (browser.ActualWidth <= 0 || browser.ActualHeight <= 0 ||
+                browser.ActualWidth + tolerance < ContentGrid.ActualWidth ||
+                browser.ActualHeight + tolerance < ContentGrid.ActualHeight)
             {
                 ReportRendererStatus("Waiting for the page area to be laid out\u2026");
                 return;
@@ -467,7 +474,14 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
     /// </summary>
     private WebView2 CreateBrowserElement()
     {
-        var browser = new WebView2();
+        // Stretch is already the default for a Control, but this element's arranged size is
+        // load-bearing rather than cosmetic - it decides what the page gets painted into - so
+        // it is stated rather than inherited.
+        var browser = new WebView2
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
 
         // The retry that makes deferring safe in InitializeAsync: a newly added element is
         // unlaid-out, and this is what fires once it is not.
