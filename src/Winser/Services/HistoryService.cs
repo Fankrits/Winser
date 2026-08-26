@@ -114,6 +114,16 @@ public sealed class HistoryService : IDisposable
             .Take(max);
     }
 
+    /// <summary>
+    /// How many matches <see cref="Suggest"/> scores and ranks before taking its top few.
+    /// Scoring parses each candidate's host out of its URL, which is not free to do for every
+    /// match in a 10,000-entry history on every keystroke - and unnecessary, since the entry
+    /// list is already newest-first and recency already counts toward the score, so the
+    /// entries a wide query would drop past this cap are the ones least likely to have won
+    /// regardless.
+    /// </summary>
+    private const int SuggestionCandidateLimit = 200;
+
     /// <summary>Address-bar suggestions: prefix/substring matches ranked by visits then recency.</summary>
     public IEnumerable<HistoryEntry> Suggest(string query, int max = 6)
     {
@@ -125,6 +135,7 @@ public sealed class HistoryService : IDisposable
         return _entries
             .Where(e => e.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                         e.Title.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(SuggestionCandidateLimit)
             .OrderByDescending(e => Score(e, query))
             .Take(max);
     }
