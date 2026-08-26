@@ -194,6 +194,11 @@ you are *not* looking at, and that is where nearly all of a browser's memory act
   up. The underlying WebView2 element itself is created in code (`WebContentView.CreateBrowserElement`),
   not declared in XAML, because `WebView2.Close()` leaves that specific instance permanently
   unusable — a discarded tab gets a brand new element the next time it is shown.
+- **Every tab is asked to trim its footprint when the window itself is minimized or loses
+  focus** — the one moment even the *selected* tab is not actually being looked at, which the
+  freeze above can never reach on its own, since it only ever applies to a tab that is not
+  selected. Lighter than a freeze: it only sets `CoreWebView2.MemoryUsageTargetLevel`, without
+  touching visibility or calling `TrySuspendAsync`.
 - **One CoreWebView2 per tab, sharing one environment**, so every tab in a window shares a
   single browser and GPU process rather than starting its own.
 - **No renderer flags.** Most of Chromium's memory switches buy their savings out of security or

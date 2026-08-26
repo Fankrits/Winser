@@ -191,6 +191,25 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         }
     }
 
+    public void SetMemoryPressure(bool constrained)
+    {
+        if (_core is not { } core)
+        {
+            return;
+        }
+
+        try
+        {
+            core.MemoryUsageTargetLevel = constrained
+                ? CoreWebView2MemoryUsageTargetLevel.Low
+                : CoreWebView2MemoryUsageTargetLevel.Normal;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Debug.WriteLine($"[Winser] Could not adjust memory pressure: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Tears the current renderer down. Used both when a tab closes for good and when an idle
     /// tab is discarded to free its memory (see <see cref="BrowserTabViewModel.TryDiscardAsync"/>)

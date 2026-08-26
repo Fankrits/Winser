@@ -101,6 +101,19 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     public void AttachWindow(IShellWindow window) => _window = window;
 
+    /// <summary>
+    /// Called when the window is minimized or loses focus: even the selected tab is off-screen
+    /// then, which <see cref="AppSettings.SleepBackgroundTabs"/>'s per-tab freeze never reaches,
+    /// since it only ever applies to a tab that is not selected.
+    /// </summary>
+    public void SetAllTabsMemoryPressure(bool constrained)
+    {
+        foreach (var tab in Tabs)
+        {
+            tab.SetMemoryPressure(constrained);
+        }
+    }
+
     partial void OnIsFullScreenChanged(bool value)
     {
         foreach (var tab in Tabs)

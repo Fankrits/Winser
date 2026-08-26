@@ -392,6 +392,9 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     /// <summary>Pushes changed settings (theme, tracking prevention, ...) into a live page.</summary>
     public void ApplyPreferences() => _host?.ApplyPreferences();
 
+    /// <summary>See <see cref="IWebViewHost.SetMemoryPressure"/>.</summary>
+    public void SetMemoryPressure(bool constrained) => _host?.SetMemoryPressure(constrained);
+
     /// <summary>Pushes the window's full-screen state into this tab's page. See IWebViewHost.</summary>
     public void SyncFullScreenFlag() => _host?.SyncFullScreenFlag(_shell.IsFullScreen);
 

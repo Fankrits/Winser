@@ -43,6 +43,16 @@ public interface IWebViewHost
     Task ClearBrowsingDataAsync();
 
     /// <summary>
+    /// Hints to Chromium that this tab's renderer should trim what it can. Distinct from the
+    /// suspend/resume pair behind <see cref="Models.AppSettings.SleepBackgroundTabs"/>: this
+    /// never touches visibility or calls TrySuspendAsync, so it is safe to apply to the tab
+    /// currently on screen too - the one case a per-tab background freeze cannot reach, since
+    /// the selected tab is never itself "background". Used when the whole window is minimized
+    /// or loses focus, at which point even the selected tab is not actually being looked at.
+    /// </summary>
+    void SetMemoryPressure(bool constrained);
+
+    /// <summary>
     /// Tears down the underlying browser - called both when the tab goes away for good and
     /// when an idle tab is discarded to free its memory (see
     /// <see cref="BrowserTabViewModel.TryDiscardAsync"/>). Safe to call again later: a

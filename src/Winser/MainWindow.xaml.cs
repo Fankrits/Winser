@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const int CascadeStep = 28;
 
     private bool _isClosing;
+    private bool _isWindowActive = true;
 
     public MainWindow(bool isPrivate = false, string? initialUrl = null)
     {
@@ -51,6 +52,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         RestorePlacement();
         Activated += OnFirstActivated;
+        Activated += OnActivationChanged;
+        AppWindow.Changed += OnAppWindowChanged;
         Closed += OnClosed;
 
         ViewModel.StartUp(initialUrl);
@@ -96,6 +99,32 @@ public sealed partial class MainWindow : Window, IShellWindow
         UpdateCaptionInset();
     }
 
+    private void OnActivationChanged(object sender, WindowActivatedEventArgs args)
+    {
+        _isWindowActive = args.WindowActivationState != WindowActivationState.Deactivated;
+        UpdateMemoryPressure();
+    }
+
+    private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+    {
+        if (args.DidPresenterChange)
+        {
+            UpdateMemoryPressure();
+        }
+    }
+
+    /// <summary>
+    /// Re-evaluates from both signals together rather than reacting to each in isolation:
+    /// minimizing normally deactivates the window too, and handling them independently would
+    /// mean the second event undoing what the first just did with a now-stale view of the
+    /// other one.
+    /// </summary>
+    private void UpdateMemoryPressure()
+    {
+        var minimized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+        ViewModel.SetAllTabsMemoryPressure(minimized || !_isWindowActive);
+    }
+
     private void OnClosed(object sender, WindowEventArgs args)
     {
         if (_isClosing)
@@ -114,6 +143,8 @@ public sealed partial class MainWindow : Window, IShellWindow
         AppServices.Settings.Changed -= OnSettingsChanged;
         RootGrid.ActualThemeChanged -= OnActualThemeChanged;
         RootGrid.PreviewKeyDown -= OnPreviewKeyDown;
+        Activated -= OnActivationChanged;
+        AppWindow.Changed -= OnAppWindowChanged;
 
         ViewModel.Detach();
         WindowManager.Unregister(this);
