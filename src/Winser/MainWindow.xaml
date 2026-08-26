@@ -22,6 +22,18 @@
   <!-- Explicit background: without Mica there is nothing else painting behind the tab strip. -->
   <Grid x:Name="RootGrid" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
 
+    <!--
+      VerticalAlignment is load-bearing, not cosmetic. TabView's own default style sets
+      VerticalAlignment="Top" (DefaultTabViewStyle, microsoft-ui-xaml
+      controls/dev/TabView/TabView.xaml), which suits a tab strip pinned above something else
+      but is wrong for a browser, where the tab *is* the window. Left at the default, TabView
+      is arranged at its desired height rather than the window's: its template's star row
+      hands the selected page an unconstrained height, BrowserTabPage's own star row collapses
+      to whatever its content happens to want, and the WebView2 - faithfully filling a
+      container that is itself wrong - paints the page into a band a few dozen pixels tall,
+      full width. Overriding it here is the whole fix; nothing further down the tree can
+      recover a height its ancestor never asked for.
+    -->
     <TabView
       x:Name="TabStrip"
       CanDragTabs="True"
@@ -30,6 +42,7 @@
       SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=TwoWay}"
       TabItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
       TabWidthMode="Equal"
+      VerticalAlignment="Stretch"
       AddTabButtonClick="OnAddTabButtonClick"
       TabCloseRequested="OnTabCloseRequested">
 
@@ -73,19 +86,16 @@
       <TabView.TabItemTemplate>
         <DataTemplate x:DataType="vm:BrowserTabViewModel">
           <!--
-            The two alignments are load-bearing, not cosmetic. TabViewItem derives from
-            ListViewItem, which aligns its content Top/Left rather than stretching it, so
-            without these the page is handed its *desired* height instead of the tab's
-            available one - a toolbar and a minimal content row, pinned to the top, with the
-            rest of the window empty beneath it. The WebView2 then fills that faithfully and
-            the page renders into a band a few dozen pixels tall.
+            No content alignment set here on purpose. TabViewItem's Horizontal/
+            VerticalContentAlignment drive the *header* presenter in its own template - the
+            title inside the tab chrome - and never reach Content, which TabView renders
+            itself. Setting them to Stretch was tried against the band-height bug and only
+            skewed the tab titles; the fix is TabView's VerticalAlignment above.
           -->
           <TabViewItem
             Header="{x:Bind Title, Mode=OneWay}"
-            HorizontalContentAlignment="Stretch"
             IconSource="{x:Bind TabIcon, Mode=OneWay}"
-            ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}"
-            VerticalContentAlignment="Stretch">
+            ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
 
             <TabViewItem.ContextFlyout>
               <MenuFlyout>
