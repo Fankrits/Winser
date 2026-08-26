@@ -127,39 +127,41 @@ CI measures this on every push rather than estimating it — the **Publish size*
 
 | Shape | Size | Files |
 |---|---:|---:|
-| Self-contained (what ships) | **208.3 MB** | 449 |
-| Framework-dependent | **50.2 MB** | 33 |
+| Self-contained (what ships) | **215.0 MB** | 456 |
+| Framework-dependent | **51.8 MB** | 38 |
 
 Three quarters of the download is the two bundled runtimes.
 
 Where it goes: `Microsoft.Windows.SDK.NET.dll` alone is **52.8 MB**, a quarter of the app — it
 is the C# projection of the entire Windows API surface. WinUI itself is next
-(`Microsoft.WinUI.dll` 15.5 MB, `Microsoft.ui.xaml.dll` 13.7 MB, plus the rest of the Windows App
+(`Microsoft.WinUI.dll` 15.7 MB, `Microsoft.ui.xaml.dll` 14.6 MB, plus the rest of the Windows App
 SDK), then the .NET runtime (`System.Private.CoreLib.dll` 15.3 MB, `coreclr.dll` 4.4 MB).
 Winser's own assembly does not make the top 25.
 
 What can still be done, honestly:
 
 - **Drop the self-contained runtimes** — set `WindowsAppSDKSelfContained` and `SelfContained` to
-  `false` in `src/Winser/Winser.csproj`. By far the biggest lever: **208.3 MB down to 50.2 MB**,
-  449 files down to 33. The cost is that the machine then needs the .NET Desktop Runtime and the
+  `false` in `src/Winser/Winser.csproj`. By far the biggest lever: **215.0 MB down to 51.8 MB**,
+  456 files down to 38. The cost is that the machine then needs the .NET Desktop Runtime and the
   Windows App SDK runtime installed, which is exactly the prerequisite the shipped shape exists
   to avoid. CI publishes both, so that trade stays a measured number rather than a guess.
 - **.NET 9/10 do *not* split up `Microsoft.Windows.SDK.NET.dll`** the way earlier notes here
   assumed — that was an unverified claim, and measuring .NET 10 directly disproved it: the file
-  drops a marginal 2.4% (54.1 → 52.8 MB), and the *total* self-contained size actually grew
-  (203.8 → 208.3 MB), because .NET 10's own `System.Private.CoreLib.dll` got bigger
-  (12.6 → 15.3 MB) by more than the SDK projection shrank. A framework upgrade bought nothing
-  here; left as a corrected record rather than a lever.
-- **The Windows App SDK's own sub-package split is the one still-untried lever.** 2.x breaks the
-  single `Microsoft.WindowsAppSDK` package into `.Base`, `.Foundation`, `.WinUI`, and others
-  Winser does not use (`.Widgets`, `.AI`, `.ML`, `.Search`) — `Microsoft.Windows.Widgets.dll`
-  (2.2 MB) already ships unused today. Referencing only what Winser needs might drop it; whether
-  the unused pieces come back transitively anyway is untested.
+  drops a marginal 2.4% (54.1 → 52.8 MB). A framework upgrade bought nothing on its own here.
+- **The Windows App SDK's sub-package split was worth doing, but almost went the other way.**
+  The `Microsoft.WindowsAppSDK` 2.4.0 meta-package pulls in nine sub-packages; Winser needs five.
+  Referencing the meta-package directly (briefly, on this branch) measured **268.8 MB** self-
+  contained — `onnxruntime.dll` (20.7 MB) and `DirectML.dll` (17.8 MB) came along for on-device
+  AI features Winser never calls, plus `Microsoft.Windows.Search.dll` and
+  `Microsoft.Windows.Widgets.dll`. Referencing only `.Base`, `.Foundation`,
+  `.InteractiveExperiences`, `.WinUI`, `.DWrite` and `.Runtime` directly — after checking that
+  none of those five sub-packages reach back into AI/ML/Search/Widgets on their own — dropped
+  all four unused packages and landed at the 215.0 MB above: a ~5% increase over this branch's
+  original .NET 8 / Windows App SDK 1.6 baseline (203.8 MB) for being on current versions of
+  both, not the ~30% increase blindly following the meta-package would have shipped.
 - **Trimming is out.** WinUI 3 activates XAML types by name at run time, so `PublishTrimmed`
   breaks it — which is why obvious dead weight (`System.Private.Xml.dll` at 7.4 MB,
-  `System.Data.Common.dll`, `Microsoft.Windows.Widgets.dll`) stays in the output despite Winser
-  never touching any of it.
+  `System.Data.Common.dll`) stays in the output despite Winser never touching any of it.
 - **`InvariantGlobalization` buys nothing here.** It is the standard advice for shrinking a
   self-contained .NET app, and on Windows it is wrong: .NET uses the ICU that ships *with the
   OS*, so there is no bundled `icudt.dat` to delete. The measurement above is what caught that.
