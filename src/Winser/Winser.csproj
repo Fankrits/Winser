@@ -74,7 +74,7 @@
     <!-- Microsoft.Web.WebView2 comes in transitively with the Windows App SDK, which
          pins the loader version its WebView2 XAML control expects. Do not pin it here. -->
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250228001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.4.0" />
   </ItemGroup>
 
 </Project>
