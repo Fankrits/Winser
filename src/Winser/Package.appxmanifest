@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  Used only by the release workflow (.github/workflows/release.yml), which passes
+  -p:WindowsPackageType=MSIX -p:GenerateAppxPackageOnBuild=true to msbuild to produce a signed
+  .msix for the GitHub Release. Every other build - the IDE, `dotnet build`/`publish`, and all
+  four jobs in .github/workflows/build.yml - leaves Winser.csproj's own WindowsPackageType=None
+  in place and never touches this file, per single-project MSIX packaging: the manifest is
+  picked up by convention from this exact filename at the project root, and only takes effect
+  once WindowsPackageType is overridden to MSIX for that one build.
+
+  Publisher below (CN=Fankrits) must match the Subject of whatever certificate signs the
+  package byte for byte - see the release workflow and README for the exact commands to
+  generate one.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="Fankrits.Winser"
+    Publisher="CN=Fankrits"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>Winser</DisplayName>
+    <PublisherDisplayName>Fankrits</PublisherDisplayName>
+    <Logo>Assets\Msix\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Winser"
+        Description="A lightweight native browser for Windows, built on WinUI 3 and WebView2."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Msix\Square150x150Logo.png"
+        Square44x44Logo="Assets\Msix\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

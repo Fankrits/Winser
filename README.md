@@ -113,6 +113,77 @@ msbuild Winser.sln -p:Configuration=Release -p:Platform=x64
 
 `winser.exe https://example.com` opens that URL on launch.
 
+## Creating a release
+
+Day-to-day, Winser stays unpackaged (`WindowsPackageType=None` in `Winser.csproj`) - that's what
+every build above, and all four jobs in `.github/workflows/build.yml`, produce. For a release
+someone can just download and install, `.github/workflows/release.yml` packages a self-contained,
+signed `.msix` instead, overriding `WindowsPackageType` to `MSIX` for that one build via
+[single-project MSIX packaging](https://learn.microsoft.com/windows/apps/windows-app-sdk/single-project-msix) -
+nothing else changes, since this repo has no separate packaging project.
+
+### One-time setup: a signing certificate
+
+MSIX packages must be signed, and the signature's certificate `Subject` must exactly match
+`Package.appxmanifest`'s `Publisher` (currently `CN=Fankrits`). In an elevated PowerShell
+prompt, on any Windows machine:
+
+```powershell
+$cert = New-SelfSignedCertificate -Type Custom -KeyUsage DigitalSignature `
+  -Subject "CN=Fankrits" -CertStoreLocation "Cert:\CurrentUser\My" `
+  -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}") `
+  -FriendlyName "Winser release signing"
+
+$password = ConvertTo-SecureString -String "<choose a password>" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath WinserSigning.pfx -Password $password
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("WinserSigning.pfx")) | Set-Clipboard
+```
+
+If you use a different `-Subject`, change `Package.appxmanifest`'s `Publisher` to match -
+identically, including spacing.
+
+Add two repository secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|---|---|
+| `WINSER_PFX_BASE64` | The clipboard contents from the last command above |
+| `WINSER_PFX_PASSWORD` | The password you chose |
+
+This certificate is self-signed, not issued by a public CA - the trade-off documented in
+[Sign your MSIX package](https://learn.microsoft.com/windows/msix/package/sign-msix-package-guide):
+free and immediate, but every machine that installs the result needs the one-time trust step
+below. A certificate from a CA, or [Azure Artifact Signing](https://learn.microsoft.com/windows/msix/package/signing-package-overview),
+removes that step; switching later only means replacing these two secrets and re-signing, not
+any code change here.
+
+### Cutting a release
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The `release` workflow builds and signs `Winser-v1.0.0-x64.msix` and attaches it to a GitHub
+Release under that tag. To test the pipeline without publishing a real version, run it manually
+from the Actions tab (**Run workflow**) - it still builds and uploads the `.msix` as a workflow
+artifact, it just skips creating a Release.
+
+## Installing a release
+
+Because the certificate above is self-signed, Windows won't trust the package until that same
+certificate is trusted on the installing machine - once, not per update. Export the public half
+(never the `.pfx` - that holds the private key) and import it as Administrator:
+
+```powershell
+Export-Certificate -Cert $cert -FilePath WinserSigning.cer
+Import-Certificate -FilePath WinserSigning.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+```
+
+After that, double-clicking the `.msix` installs Winser like any other Windows app - Start menu
+entry, normal uninstall from Settings, no SmartScreen "unrecognized publisher" prompt, since
+that check is for standalone EXE/MSI downloads and MSIX installation verifies the package
+signature instead.
+
 ## Size
 
 Winser builds **unpackaged and self-contained**: the output is a plain `Winser.exe` carrying its

@@ -64,9 +64,17 @@
 
   <ItemGroup>
     <None Remove="Assets\**" />
-    <Content Include="Assets\**">
+    <Content Include="Assets\**" Exclude="Assets\Msix\**">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+
+    <!--
+      Package.appxmanifest's own images. These exist only for the release workflow's MSIX
+      build (see Package.appxmanifest) - deliberately without CopyToOutputDirectory, so they
+      stay out of the unpackaged app's output instead of adding dead weight to every build
+      that never touches WindowsPackageType=MSIX.
+    -->
+    <Content Include="Assets\Msix\**" />
   </ItemGroup>
 
   <ItemGroup>

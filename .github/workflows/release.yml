@@ -1,0 +1,121 @@
+name: release
+
+# Separate from build.yml on purpose: build.yml verifies every push compiles, cheaply and
+# often. This packages a signed, installable .msix, which needs secrets and only makes sense
+# as a deliberate act - pushing a version tag, or a manual run to test the pipeline before
+# committing to a real tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package MSIX (Release x64)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Determine release tag
+        shell: pwsh
+        run: |
+          $tag = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "dev-$env:GITHUB_RUN_NUMBER" }
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # Package.appxmanifest's Publisher (CN=Fankrits) must match this certificate's Subject
+      # byte for byte, or signing fails. See README for the exact commands to generate one.
+      - name: Check the signing certificate secrets are configured
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrEmpty("${{ secrets.WINSER_PFX_BASE64 }}") -or [string]::IsNullOrEmpty("${{ secrets.WINSER_PFX_PASSWORD }}")) {
+            Write-Error "WINSER_PFX_BASE64 and/or WINSER_PFX_PASSWORD repo secrets are not set - see README.md#creating-a-release for how to generate and add them."
+            exit 1
+          }
+
+      # RID-scoped builds need the obj folder populated with RuntimeIdentifiers before Build,
+      # same reason build.yml's msbuild jobs restore as a separate step.
+      - name: Restore
+        run: >
+          msbuild Winser.sln
+          -t:Restore
+          -p:Configuration=Release
+          -p:Platform=x64
+          -m
+
+      - name: Decode the signing certificate
+        shell: pwsh
+        run: |
+          $bytes = [System.Convert]::FromBase64String("${{ secrets.WINSER_PFX_BASE64 }}")
+          [IO.File]::WriteAllBytes("${{ runner.temp }}\WinserSigning.pfx", $bytes)
+
+      # WindowsPackageType=MSIX overrides Winser.csproj's own WindowsPackageType=None for this
+      # build only - every other build (the IDE, dotnet build/publish, all of build.yml) never
+      # passes this and stays unpackaged. GenerateAppxPackageOnBuild is what actually produces
+      # the .msix; without it this would just be an ordinary (packaged-but-unpublished) build.
+      - name: Build and package the MSIX
+        run: >
+          msbuild Winser.sln
+          -p:Configuration=Release
+          -p:Platform=x64
+          -p:WindowsPackageType=MSIX
+          -p:GenerateAppxPackageOnBuild=true
+          -p:AppxBundle=Never
+          -p:UapAppxPackageBuildMode=SideloadOnly
+          -p:AppxPackageDir=Packages\
+          -p:AppxPackageSigningEnabled=true
+          -p:PackageCertificateKeyFile=${{ runner.temp }}\WinserSigning.pfx
+          -p:PackageCertificatePassword=${{ secrets.WINSER_PFX_PASSWORD }}
+          -p:AppxPackageSigningTimestampServerUrl=http://timestamp.digicert.com
+          -p:AppxPackageSigningTimestampDigestAlgorithm=SHA256
+          -m
+
+      - name: Remove the signing certificate
+        if: always()
+        shell: pwsh
+        run: Remove-Item -Path "${{ runner.temp }}\WinserSigning.pfx" -ErrorAction SilentlyContinue
+
+      # Fails loudly rather than letting a wrong-glob assumption silently upload nothing or
+      # the wrong file - the same "let CI answer, don't guess" rule this repo's build.yml
+      # comments already apply to EnableMsixTooling.
+      - name: Locate the packaged MSIX
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem -Path src/Winser/Packages -Recurse -Filter *.msix -ErrorAction SilentlyContinue
+          if (-not $msix) {
+            Write-Error "No .msix found under src/Winser/Packages - packaging did not produce the expected output."
+            exit 1
+          }
+          if ($msix.Count -gt 1) {
+            Write-Error "Expected exactly one .msix, found $($msix.Count): $($msix.FullName -join ', ')"
+            exit 1
+          }
+
+          $dest = "Winser-$env:RELEASE_TAG-x64.msix"
+          Copy-Item $msix.FullName $dest
+          "MSIX_PATH=$dest" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Packaged $dest ($([math]::Round($msix.Length / 1MB, 1)) MB)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Winser-${{ env.RELEASE_TAG }}-x64-msix
+          path: ${{ env.MSIX_PATH }}
+
+      - name: Create the GitHub release
+        if: github.ref_type == 'tag'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create ${{ github.ref_name }}
+          "${{ env.MSIX_PATH }}"
+          --title "${{ github.ref_name }}"
+          --notes "Self-signed MSIX. Before installing for the first time, trust the signing certificate once - see README.md#installing-a-release for the exact command."
