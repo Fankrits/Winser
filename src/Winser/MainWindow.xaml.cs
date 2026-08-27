@@ -89,7 +89,18 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void RefreshTabChrome() => UpdateChromeLayout();
 
-    public void FocusAddressBar() => ViewModel.SelectedTab?.RequestAddressFocus();
+    public void FocusAddressBar()
+    {
+        if (ViewModel.UseVerticalTabs)
+        {
+            VerticalAddressBox.Focus(FocusState.Programmatic);
+            VerticalAddressBox.FindDescendant<TextBox>()?.SelectAll();
+        }
+        else
+        {
+            ViewModel.SelectedTab?.RequestAddressFocus();
+        }
+    }
 
     public void CloseWindow() => Close();
 
@@ -351,5 +362,61 @@ public sealed partial class MainWindow : Window, IShellWindow
         {
             ViewModel.SelectedTab = tab;
         }
+    }
+
+    // ------------------------------------------------------- vertical tabs address bar
+    //
+    // Mirrors BrowserTabPage.xaml.cs's OnAddress* handlers exactly, retargeted from a fixed
+    // per-tab ViewModel to ViewModel.SelectedTab, since this one address bar serves whichever
+    // tab is currently selected rather than belonging to a single tab's own page.
+
+    private void OnVerticalAddressTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            ViewModel.SelectedTab?.UpdateSuggestions(sender.Text);
+        }
+    }
+
+    private void OnVerticalAddressQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (ViewModel.SelectedTab is not { } tab)
+        {
+            return;
+        }
+
+        if (args.ChosenSuggestion is AddressSuggestion suggestion)
+        {
+            tab.NavigateResolved(suggestion.Target);
+        }
+        else
+        {
+            tab.Navigate(args.QueryText);
+        }
+
+        tab.IsAddressFocused = false;
+        tab.Suggestions.Clear();
+        tab.FocusWebContent();
+    }
+
+    private void OnVerticalAddressGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedTab is { } tab)
+        {
+            tab.IsAddressFocused = true;
+        }
+    }
+
+    private void OnVerticalAddressLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedTab is not { } tab)
+        {
+            return;
+        }
+
+        tab.IsAddressFocused = false;
+
+        // Put back whatever the page's real address is if the edit was abandoned.
+        VerticalAddressBox.Text = UrlHelper.ForDisplay(tab.Url);
     }
 }

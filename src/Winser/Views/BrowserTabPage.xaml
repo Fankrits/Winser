@@ -25,7 +25,7 @@
       Padding="6,0"
       Background="{ThemeResource WinserChromeBrush}"
       ColumnSpacing="2"
-      Visibility="{x:Bind ViewModel.Shell.IsFullScreen, Mode=OneWay, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}">
+      Visibility="{x:Bind ViewModel.Shell.IsToolbarVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="Auto" />
         <ColumnDefinition Width="Auto" />

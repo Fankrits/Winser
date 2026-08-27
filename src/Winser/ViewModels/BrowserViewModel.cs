@@ -47,7 +47,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
     public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
@@ -55,7 +55,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     public partial bool ShowBookmarksBar { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
     public partial bool UseVerticalTabs { get; set; }
 
     [ObservableProperty]
@@ -114,6 +114,13 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     /// <summary>Full screen hides all chrome, the vertical tab pane included.</summary>
     public bool IsVerticalTabsPaneVisible => UseVerticalTabs && !IsFullScreen;
+
+    /// <summary>
+    /// The per-tab toolbar (nav buttons, address bar, zoom/mute/bookmark/downloads/menu) is
+    /// redundant with the vertical pane's own nav row and address bar, so it hides the same way
+    /// full screen already hides it.
+    /// </summary>
+    public bool IsToolbarVisible => !IsFullScreen && !UseVerticalTabs;
 
     /// <summary>Pinned open, or currently being peeked at via hover.</summary>
     public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver;
