@@ -22,7 +22,6 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const int DefaultHeight = 860;
     private const int CascadeStep = 28;
 
-    private const double VerticalModeChromeHeight = 40;
     private const double VerticalTabsCollapsedWidth = 48;
     private const double VerticalTabsExpandedWidth = 240;
 
@@ -110,6 +109,15 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         Activated -= OnFirstActivated;
         UpdateCaptionInset();
+
+        // The constructor's own UpdateChromeLayout() call runs before the first layout pass, so
+        // TabStripHeight was still falling back to FallbackTabStripHeight then. If vertical tabs
+        // was already on at startup (a persisted setting, not something toggled just now), that
+        // stale guess would otherwise never get corrected: nothing else changes UseVerticalTabs/
+        // IsFullScreen/pinned/hover state on its own just because layout finished. Once first
+        // activated, a real layout pass has already run, so this re-applies the actual measured
+        // height instead.
+        UpdateChromeLayout();
     }
 
     private void OnActivationChanged(object sender, WindowActivatedEventArgs args)
@@ -264,7 +272,6 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
 
-        VerticalModeChromeRow.Height = vertical ? new GridLength(VerticalModeChromeHeight) : new GridLength(0);
         VerticalTabsColumnDef.Width = vertical
             ? new GridLength(ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsCollapsedWidth)
             : new GridLength(0);
@@ -272,10 +279,17 @@ public sealed partial class MainWindow : Window, IShellWindow
         // TabView renders the strip and the content in one control, so the only way to hide
         // just the strip - for full screen, or because the vertical pane is standing in for it -
         // is to slide it above the client area. A negative top margin on a stretched child grows
-        // it by the same amount, so it still fills its cell either way.
+        // it by the same amount, so it still fills its cell either way. This only fully hides the
+        // strip because TabStrip's own cell is anchored at y=0 in both modes (see the XAML
+        // comments) - were it pushed down by a reserved row instead, the strip would still
+        // occupy part of the now-visible band above that row, no matter the margin used.
         TabStrip.Margin = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs
             ? new Thickness(0, -TabStripHeight, 0, 0)
             : new Thickness(0);
+
+        // The vertical mode drag region overlays the same top strip TabStrip just vacated,
+        // rather than reserving it, so it needs to match that same height to look intentional.
+        VerticalModeDragRegion.Height = TabStripHeight;
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.

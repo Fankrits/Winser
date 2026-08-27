@@ -26,23 +26,22 @@
   <!--
     Transparent, not unset: lets Mica show through while keeping the whole window hit-testable.
 
-    Column 0 / Row 0 exist for vertical tabs mode only: a pane on the left standing in for the
-    horizontal strip, and a slim bar above the content standing in for the drag region the
-    strip's TabStripFooter normally provides. Both are sized to zero and their column/row
-    collapses to nothing when vertical tabs are off, which is also the default - so nothing
-    here changes horizontal mode's geometry. TabStrip's own Grid.Row/Column never change between
-    modes; only VerticalTabsColumnDef's width and VerticalModeChromeRow's height do (see
-    MainWindow.xaml.cs, UpdateChromeLayout), which is what pushes TabStrip's cell around.
+    Column 0 exists for vertical tabs mode only: a pane on the left standing in for the
+    horizontal strip. It is sized to zero and collapses to nothing when vertical tabs are off,
+    which is also the default - so nothing here changes horizontal mode's geometry. TabStrip's
+    own Grid.Column never changes between modes and it deliberately has no Grid.Row at all - its
+    cell must stay anchored at y=0 in both modes, since that is what lets a negative top margin
+    (see MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully off-screen above the
+    window rather than just far enough to clear a reserved row. Only VerticalTabsColumnDef's
+    width changes at runtime, which is what pushes TabStrip's cell (and everything to its right)
+    around; the vertical mode drag region is a same-origin overlay, not a second row, for the
+    same y=0 reason - see its own comment below.
   -->
   <Grid x:Name="RootGrid" Background="Transparent">
     <Grid.ColumnDefinitions>
       <ColumnDefinition x:Name="VerticalTabsColumnDef" Width="0" />
       <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
-    <Grid.RowDefinitions>
-      <RowDefinition x:Name="VerticalModeChromeRow" Height="0" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
 
     <!--
       VerticalAlignment is load-bearing, not cosmetic. TabView's own default style sets
@@ -58,7 +57,6 @@
     -->
     <TabView
       x:Name="TabStrip"
-      Grid.Row="1"
       Grid.Column="1"
       CanDragTabs="True"
       CanReorderTabs="True"
@@ -141,20 +139,30 @@
       </TabView.TabItemTemplate>
     </TabView>
 
-    <!--  Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
-          clearance, since TabStrip's own footer is inside its (now hidden) native strip.  -->
+    <!--
+      Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
+      clearance, since TabStrip's own footer is inside its (now hidden) native strip.
+
+      An overlay (Top-aligned, Height set from code to match TabStripHeight), not a reserved
+      Grid row: TabStrip has to keep its cell anchored at y=0 for the strip-hiding trick below
+      to work at all, so there is no row left over here to occupy - "content starts at y=40"
+      and "the native strip is fully off-screen above y=0" are not simultaneously satisfiable
+      once TabStrip's own cell has been pushed down to y=40 by a reserved row, because the
+      strip and the content it hides above are one contiguous block inside TabView's template.
+      Overlaying instead of reserving space means this bar tints whatever content is directly
+      under it rather than displacing it - the same trade Windows 11 itself makes when content
+      scrolls under an extended, Mica-tinted title bar.
+    -->
     <Grid
       x:Name="VerticalModeDragRegion"
-      Grid.Row="0"
       Grid.Column="1"
+      VerticalAlignment="Top"
       Background="{ThemeResource WinserChromeBrush}"
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
 
     <!--  Vertical tabs mode's stand-in for the whole native strip.  -->
     <Border
       x:Name="VerticalTabsPane"
-      Grid.Row="0"
-      Grid.RowSpan="2"
       Grid.Column="0"
       Background="{ThemeResource WinserChromeBrush}"
       BorderBrush="{ThemeResource WinserChromeBorderBrush}"
