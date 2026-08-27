@@ -278,6 +278,34 @@ you are *not* looking at, and that is where nearly all of a browser's memory act
 Winser's own managed footprint is small and stays bounded: history is capped at 10,000 entries,
 and everything persisted is a plain JSON file written by a debounced atomic replace.
 
+## Security
+
+The new tab page runs as web content, not as part of the shell, so everything it can ask
+Winser to do goes through the same message boundary a hostile site would have to get through
+too - there is no separate, more-trusted path for Winser's own pages beyond the origin check
+below. In `Controls/WebContentView.xaml.cs`:
+
+- **`navigate`/`newtab` messages** (`OnWebMessageReceived`) are only honored from
+  `https://assets.winser` - `InternalPages.IsTrustedOrigin` checks scheme and host exactly.
+  `newtab` is checked again against `UrlHelper.IsWebRequestable` (http/https only) even from
+  that trusted origin, so it can't be used to open `file://` or `winser://` in a new tab.
+- **`window.open()`** (`OnNewWindowRequested`) goes through `IsWebRequestable` regardless of
+  origin, so no page - trusted or not - can pop `winser://settings` or a local file.
+- **Camera, microphone, location, notifications and clipboard-read** are mediated
+  (`OnPermissionRequested`): decisions are remembered per origin and listed/revocable in
+  Settings, and an InPrivate window denies all of them outright rather than prompting.
+  **Script dialogs** cap at 10 per navigation (`MaxScriptDialogsPerNavigation`); further
+  `alert()`/`confirm()`/`prompt()` calls are dismissed without ever showing.
+- **Accelerator keys** (`AreBrowserAcceleratorKeysEnabled = false`) are owned solely by
+  Winser's own shortcut bridge, not also handled by WebView2 itself, and forwarded shortcuts
+  are rate-limited (`ShortcutBurstLimit`) so a scripted key flood can't out-open a person.
+- **Restored session URLs** go through `UrlHelper.IsWebRequestable` before reopening, so a
+  tampered `session.json` can't hand a tab a `file://` or `winser://` address on launch.
+
+`tools/security-check.html` exercises all of the above from an actual untrusted origin - open
+its local path directly in Winser's address bar (not by copying it into `Assets/Web`, which
+would make it trusted and defeat its own point) and it reports which of these still hold.
+
 ## Where Winser keeps things
 
 Everything lives under `%LOCALAPPDATA%\Winser`:
