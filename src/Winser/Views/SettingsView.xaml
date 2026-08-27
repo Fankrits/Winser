@@ -11,7 +11,7 @@
   <Grid Background="{ThemeResource WinserContentBackgroundBrush}">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="232" />
-      <ColumnDefinition Width="*" />
+      <ColumnDefinition Width="*" MinWidth="480" />
     </Grid.ColumnDefinitions>
 
     <!--  ============================== sidebar ==============================  -->
@@ -56,7 +56,7 @@
       <StackPanel
         MaxWidth="720"
         Margin="32,28,32,0"
-        HorizontalAlignment="Stretch">
+        HorizontalAlignment="Center">
 
         <!--  ============================ Appearance =============================  -->
         <StackPanel Visibility="{x:Bind ViewModel.IsAppearanceSection, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
@@ -69,7 +69,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Theme" />
+                <TextBlock Text="Theme" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Applies to Winser's chrome and to pages that support colour schemes." />
               </StackPanel>
               <ComboBox
@@ -88,7 +88,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Show the bookmarks bar" />
+                <TextBlock Text="Show the bookmarks bar" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Ctrl+Shift+B toggles it too." />
               </StackPanel>
               <ToggleSwitch
@@ -107,7 +107,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Default page zoom" />
+                <TextBlock Text="Default page zoom" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Applied to new tabs. Ctrl+0 resets a single tab." />
               </StackPanel>
               <NumberBox
@@ -134,7 +134,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <TextBlock Text="When Winser opens" VerticalAlignment="Center" />
+              <TextBlock Text="When Winser opens" TextWrapping="Wrap" VerticalAlignment="Center" />
               <ComboBox
                 Grid.Column="1"
                 MinWidth="240"
@@ -146,7 +146,7 @@
 
           <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
             <StackPanel Spacing="8">
-              <TextBlock Text="Home page" />
+              <TextBlock Text="Home page" TextWrapping="Wrap" />
               <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
@@ -175,7 +175,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Search engine used in the address bar" />
+                <TextBlock Text="Search engine used in the address bar" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Anything that is not an address becomes a search." />
               </StackPanel>
               <ComboBox
@@ -200,7 +200,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Tracking prevention" />
+                <TextBlock Text="Tracking prevention" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Blocks known trackers. Strict can break sign-ins on some sites." />
               </StackPanel>
               <ComboBox
@@ -219,7 +219,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Keep history for" />
+                <TextBlock Text="Keep history for" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Days. Older entries are dropped at startup. Set to 0 to keep everything." />
               </StackPanel>
               <NumberBox
@@ -239,7 +239,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <TextBlock Text="Clear browsing history when Winser closes" VerticalAlignment="Center" />
+              <TextBlock Text="Clear browsing history when Winser closes" TextWrapping="Wrap" VerticalAlignment="Center" />
               <ToggleSwitch
                 Grid.Column="1"
                 IsOn="{x:Bind ViewModel.ClearHistoryOnExit, Mode=TwoWay}"
@@ -256,7 +256,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Clear browsing data now" />
+                <TextBlock Text="Clear browsing data now" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Cookies, cache and site data for every site." />
               </StackPanel>
               <Button
@@ -274,7 +274,7 @@
 
           <Border Margin="0,16,0,0" Style="{StaticResource SettingsCardStyle}">
             <StackPanel Spacing="8">
-              <TextBlock Text="Save files to" />
+              <TextBlock Text="Save files to" TextWrapping="Wrap" />
               <Grid ColumnSpacing="8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
@@ -292,7 +292,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
-              <TextBlock Text="Ask where to save each file" VerticalAlignment="Center" />
+              <TextBlock Text="Ask where to save each file" TextWrapping="Wrap" VerticalAlignment="Center" />
               <ToggleSwitch
                 Grid.Column="1"
                 IsOn="{x:Bind ViewModel.AskWhereToSaveDownloads, Mode=TwoWay}"
@@ -314,7 +314,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Open pop-up windows as tabs" />
+                <TextBlock Text="Open pop-up windows as tabs" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Keeps everything a site opens inside this window." />
               </StackPanel>
               <ToggleSwitch
@@ -333,7 +333,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Sleep background tabs" />
+                <TextBlock Text="Sleep background tabs" TextWrapping="Wrap" />
                 <TextBlock
                   Opacity="0.6"
                   Style="{StaticResource CaptionTextBlockStyle}"
@@ -356,7 +356,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Discard idle background tabs after" />
+                <TextBlock Text="Discard idle background tabs after" TextWrapping="Wrap" />
                 <TextBlock
                   Opacity="0.6"
                   Style="{StaticResource CaptionTextBlockStyle}"
@@ -381,7 +381,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Run JavaScript" />
+                <TextBlock Text="Run JavaScript" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Takes effect in tabs opened after the change." />
               </StackPanel>
               <ToggleSwitch
@@ -400,7 +400,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Enable developer tools" />
+                <TextBlock Text="Enable developer tools" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="F12 opens the DevTools window for the active tab." />
               </StackPanel>
               <ToggleSwitch
@@ -419,7 +419,7 @@
                 <ColumnDefinition Width="Auto" />
               </Grid.ColumnDefinitions>
               <StackPanel>
-                <TextBlock Text="Save and suggest form data" />
+                <TextBlock Text="Save and suggest form data" TextWrapping="Wrap" />
                 <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Autofill for addresses, cards and saved passwords." />
               </StackPanel>
               <ToggleSwitch
