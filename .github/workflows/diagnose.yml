@@ -1,0 +1,163 @@
+name: diagnose
+
+# Experimental, one-off: an attempt to close the plan's empirical verification gaps (memory
+# measurements, a visual look at Mica, a few runtime shortcuts) from CI instead of a human's
+# hands, since GitHub's windows-latest runners are real interactive Windows sessions with
+# Edge/WebView2 preinstalled (confirmed against actions/runner-images' own manifest) rather
+# than the headless Session-0-only boxes they're sometimes assumed to be. Everything it drives
+# is done with SendKeys against shortcuts read directly out of BrowserViewModel.HandleShortcut,
+# not guessed. Not wired into build.yml or release.yml - this is diagnostic, not a gate, and
+# is expected to need iteration.
+on:
+  push:
+    branches: ["claude/windows-browser-winui3-rt6irp"]
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    name: Empirical check (memory, Mica, shortcuts)
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish
+        run: >
+          dotnet publish src/Winser/Winser.csproj
+          -c Release
+          -p:Platform=x64
+          -r win-x64
+          -o publish
+
+      - name: Seed a short discard threshold
+        shell: pwsh
+        run: |
+          # 1 minute instead of the 30-minute default, purely so this job finishes in CI time.
+          # JsonStore.Load() reads this file directly if present - confirmed in
+          # Services/JsonStore.cs and Services/SettingsService.cs - so a partial document with
+          # just this one field is enough; everything else keeps its normal C# default.
+          $dataDir = Join-Path $env:LOCALAPPDATA 'Winser\Data'
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          '{"discardIdleTabsAfterMinutes": 1, "startup": 0}' |
+            Out-File -Encoding utf8 (Join-Path $dataDir 'settings.json')
+          # startup:0 = StartupBehavior.NewTabPage, so a fresh run never tries to restore a
+          # session that doesn't exist yet.
+
+      - name: Drive Winser and record what actually happens
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $shell = New-Object -ComObject WScript.Shell
+          $shots = New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\diagnostics"
+
+          function Measure-WebView2 {
+              $procs = Get-Process msedgewebview2 -ErrorAction SilentlyContinue
+              if (-not $procs) { return [pscustomobject]@{ MB = 0; Count = 0 } }
+              [pscustomobject]@{
+                  MB    = [math]::Round((($procs | Measure-Object WorkingSet64 -Sum).Sum) / 1MB, 1)
+                  Count = $procs.Count
+              }
+          }
+
+          function Send-Key($keys) {
+              $shell.AppActivate($proc.Id) | Out-Null
+              Start-Sleep -Milliseconds 400
+              [System.Windows.Forms.SendKeys]::SendWait($keys)
+          }
+
+          function Save-Shot($name) {
+              $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              $g = [System.Drawing.Graphics]::FromImage($bmp)
+              $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+              $path = Join-Path $shots.FullName "$name.png"
+              $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+              $g.Dispose(); $bmp.Dispose()
+              Write-Host "Saved $path"
+          }
+
+          $results = [ordered]@{}
+
+          Write-Host "Launching Winser..."
+          $proc = Start-Process -FilePath "publish\Winser.exe" -ArgumentList "https://example.com" -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited) {
+              Write-Error "Winser.exe exited immediately (code $($proc.ExitCode)) - nothing else to measure."
+              exit 1
+          }
+          Save-Shot "01-first-launch"
+
+          Write-Host "Opening nine more tabs..."
+          for ($i = 0; $i -lt 9; $i++) {
+              Send-Key "^t"
+              Start-Sleep -Milliseconds 500
+              Send-Key "^l"
+              Start-Sleep -Milliseconds 300
+              Send-Key "https://example.com"
+              Send-Key "{ENTER}"
+              Start-Sleep -Seconds 2
+          }
+          Start-Sleep -Seconds 8
+          Save-Shot "02-ten-tabs-open"
+          $results.Baseline10Tabs = Measure-WebView2
+          Write-Host ("Baseline: {0} MB across {1} processes" -f $results.Baseline10Tabs.MB, $results.Baseline10Tabs.Count)
+
+          Write-Host "Exercising find, zoom and full screen on the active tab..."
+          Send-Key "^f"
+          Start-Sleep -Seconds 1
+          Save-Shot "03-find-bar"
+          Send-Key "{ESC}"
+          Send-Key "^{+}"
+          Send-Key "^{+}"
+          Start-Sleep -Milliseconds 500
+          Save-Shot "04-zoomed-in"
+          Send-Key "^0"
+          Send-Key "{F11}"
+          Start-Sleep -Seconds 1
+          Save-Shot "05-fullscreen"
+          Send-Key "{F11}"
+          Start-Sleep -Milliseconds 500
+
+          Write-Host "Switching to tab 1 so the other nine background and freeze..."
+          Send-Key "^1"
+          Start-Sleep -Seconds 15
+          $results.AfterFreeze = Measure-WebView2
+          Write-Host ("After freeze: {0} MB across {1} processes" -f $results.AfterFreeze.MB, $results.AfterFreeze.Count)
+
+          Write-Host "Waiting 75s for the 1-minute discard threshold..."
+          Start-Sleep -Seconds 75
+          $results.AfterDiscard = Measure-WebView2
+          Write-Host ("After discard: {0} MB across {1} processes" -f $results.AfterDiscard.MB, $results.AfterDiscard.Count)
+
+          Write-Host "Returning to a discarded tab..."
+          Send-Key "^2"
+          Start-Sleep -Seconds 5
+          Save-Shot "06-returned-to-discarded-tab"
+          $results.AfterReturn = Measure-WebView2
+
+          $summary = @()
+          $summary += "## Empirical check results"
+          $summary += ""
+          $summary += "| Checkpoint | MB | msedgewebview2 processes |"
+          $summary += "|---|---:|---:|"
+          foreach ($key in $results.Keys) {
+              $summary += "| $key | {0:N1} | {1} |" -f $results[$key].MB, $results[$key].Count
+          }
+          $summary += ""
+          $summary += "Screenshots are attached as the diagnostics-screenshots artifact."
+          $summary | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          $summary | Out-String | Write-Host
+
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name msedgewebview2 -Force -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostics-screenshots
+          path: diagnostics/*.png
