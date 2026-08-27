@@ -52,7 +52,22 @@ jobs:
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $shell = New-Object -ComObject WScript.Shell
+
+          # Run #2 showed only one tab ever existed (diagnostics.log: "tabs=1" on every sweep
+          # tick) despite nine Ctrl+T sequences being sent - so nothing after the first was
+          # actually reaching the window. WScript.Shell.AppActivate wraps SetForegroundWindow,
+          # which Windows' focus-stealing prevention can silently refuse for a window owned by
+          # a process this script only just started - a well-known failure mode for exactly
+          # this launch-then-SendKeys pattern, not something AppActivate reports as failing.
+          # AllowSetForegroundWindow is the actual, documented way to grant a specific process
+          # permission to take focus; calling SetForegroundWindow directly afterwards (rather
+          # than through the older COM wrapper) removes the layer that was hiding whether it
+          # worked.
+          # A multi-line here-string won't work here: PowerShell 7 requires its closing "@ at
+          # column 1 with no leading whitespace, which a YAML block scalar can't provide
+          # without ending the block early (confirmed by trying it - "White space is not
+          # allowed before the string terminator"). One line avoids the conflict entirely.
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int dwProcessId); }'
           $shots = New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\diagnostics"
 
           function Measure-WebView2 {
@@ -65,7 +80,17 @@ jobs:
           }
 
           function Send-Key($keys) {
-              $shell.AppActivate($proc.Id) | Out-Null
+              $proc.Refresh()
+              $hwnd = $proc.MainWindowHandle
+              if ($hwnd -eq [IntPtr]::Zero) {
+                  Write-Warning "MainWindowHandle is zero - Send-Key '$keys' has no window to target"
+              } else {
+                  [Win32]::ShowWindow($hwnd, 9) | Out-Null   # SW_RESTORE, in case it's minimized
+                  $activated = [Win32]::SetForegroundWindow($hwnd)
+                  if (-not $activated) {
+                      Write-Warning "SetForegroundWindow returned false for Send-Key '$keys'"
+                  }
+              }
               Start-Sleep -Milliseconds 400
               [System.Windows.Forms.SendKeys]::SendWait($keys)
           }
@@ -85,11 +110,14 @@ jobs:
 
           Write-Host "Launching Winser..."
           $proc = Start-Process -FilePath "publish\Winser.exe" -ArgumentList "https://example.com" -PassThru
+          [Win32]::AllowSetForegroundWindow($proc.Id) | Out-Null
           Start-Sleep -Seconds 8
           if ($proc.HasExited) {
               Write-Error "Winser.exe exited immediately (code $($proc.ExitCode)) - nothing else to measure."
               exit 1
           }
+          $proc.Refresh()
+          Write-Host "MainWindowHandle after startup: $($proc.MainWindowHandle)"
           Save-Shot "01-first-launch"
 
           Write-Host "Opening nine more tabs..."
