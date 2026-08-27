@@ -46,12 +46,26 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
-    [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible), nameof(IsVerticalTabsPaneVisible))]
     public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
     public partial bool ShowBookmarksBar { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible))]
+    public partial bool UseVerticalTabs { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded))]
+    [NotifyPropertyChangedFor(nameof(PinGlyph), nameof(PinTooltip))]
+    public partial bool IsVerticalTabsPinned { get; set; }
+
+    /// <summary>True while the pointer is over the collapsed vertical tabs rail, expanding it as a peek.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded))]
+    public partial bool IsVerticalTabsPointerOver { get; set; }
 
     [ObservableProperty]
     public partial bool HasActiveDownloads { get; set; }
@@ -60,6 +74,8 @@ public sealed partial class BrowserViewModel : ObservableObject
     {
         IsPrivate = isPrivate;
         ShowBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar && !isPrivate;
+        UseVerticalTabs = AppServices.Settings.Current.UseVerticalTabs;
+        IsVerticalTabsPinned = AppServices.Settings.Current.VerticalTabsPinned;
 
         AppServices.Bookmarks.Items.CollectionChanged += OnBookmarksChanged;
         AppServices.Downloads.Items.CollectionChanged += OnDownloadsChanged;
@@ -95,9 +111,19 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// <summary>Full screen hides all chrome, the bookmarks bar included.</summary>
     public bool IsBookmarksBarVisible => ShowBookmarksBar && !IsFullScreen;
 
+    /// <summary>Full screen hides all chrome, the vertical tab pane included.</summary>
+    public bool IsVerticalTabsPaneVisible => UseVerticalTabs && !IsFullScreen;
+
+    /// <summary>Pinned open, or currently being peeked at via hover.</summary>
+    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver;
+
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
     public string FullScreenTooltip => IsFullScreen ? "Exit full screen (F11)" : "Full screen (F11)";
+
+    public string PinGlyph => IsVerticalTabsPinned ? Glyphs.Unpin : Glyphs.Pin;
+
+    public string PinTooltip => IsVerticalTabsPinned ? "Unpin the tab pane" : "Keep the tab pane open";
 
     public void AttachWindow(IShellWindow window) => _window = window;
 
@@ -121,6 +147,16 @@ public sealed partial class BrowserViewModel : ObservableObject
             tab.SyncFullScreenFlag();
         }
     }
+
+    // All three drive the window's pixel-level layout (pane width, drag region, whether the
+    // native strip is hidden), which lives on the window rather than here. Routing every write
+    // through RefreshTabChrome - rather than only the ones a window event handler starts - covers
+    // UseVerticalTabs flipping from winser://settings, in a different tab entirely.
+    partial void OnUseVerticalTabsChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsPinnedChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsPointerOverChanged(bool value) => _window?.RefreshTabChrome();
 
     /// <summary>The owning window's HWND, for WinRT pickers that need an owner.</summary>
     public nint WindowHandle => _window?.WindowHandle ?? IntPtr.Zero;
@@ -567,6 +603,18 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Whether the vertical pane stays expanded is not privacy-sensitive the way the bookmarks
+    /// bar is, so unlike <see cref="ToggleBookmarksBar"/> this persists for InPrivate windows too.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleVerticalTabsPinned()
+    {
+        IsVerticalTabsPinned = !IsVerticalTabsPinned;
+        AppServices.Settings.Current.VerticalTabsPinned = IsVerticalTabsPinned;
+        AppServices.Settings.Commit();
+    }
+
     [RelayCommand]
     private void ToggleFullScreen() => _window?.SetFullScreen(!IsFullScreen);
 
@@ -615,6 +663,8 @@ public sealed partial class BrowserViewModel : ObservableObject
         {
             ShowBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar;
         }
+
+        UseVerticalTabs = AppServices.Settings.Current.UseVerticalTabs;
 
         foreach (var tab in Tabs)
         {

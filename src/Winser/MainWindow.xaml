@@ -23,8 +23,26 @@
     <MicaBackdrop />
   </Window.SystemBackdrop>
 
-  <!-- Transparent, not unset: lets Mica show through while keeping the whole window hit-testable. -->
+  <!--
+    Transparent, not unset: lets Mica show through while keeping the whole window hit-testable.
+
+    Column 0 / Row 0 exist for vertical tabs mode only: a pane on the left standing in for the
+    horizontal strip, and a slim bar above the content standing in for the drag region the
+    strip's TabStripFooter normally provides. Both are sized to zero and their column/row
+    collapses to nothing when vertical tabs are off, which is also the default - so nothing
+    here changes horizontal mode's geometry. TabStrip's own Grid.Row/Column never change between
+    modes; only VerticalTabsColumnDef's width and VerticalModeChromeRow's height do (see
+    MainWindow.xaml.cs, UpdateChromeLayout), which is what pushes TabStrip's cell around.
+  -->
   <Grid x:Name="RootGrid" Background="Transparent">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition x:Name="VerticalTabsColumnDef" Width="0" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition x:Name="VerticalModeChromeRow" Height="0" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
 
     <!--
       VerticalAlignment is load-bearing, not cosmetic. TabView's own default style sets
@@ -40,6 +58,8 @@
     -->
     <TabView
       x:Name="TabStrip"
+      Grid.Row="1"
+      Grid.Column="1"
       CanDragTabs="True"
       CanReorderTabs="True"
       IsAddTabButtonVisible="True"
@@ -120,6 +140,147 @@
         </DataTemplate>
       </TabView.TabItemTemplate>
     </TabView>
+
+    <!--  Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
+          clearance, since TabStrip's own footer is inside its (now hidden) native strip.  -->
+    <Grid
+      x:Name="VerticalModeDragRegion"
+      Grid.Row="0"
+      Grid.Column="1"
+      Background="{ThemeResource WinserChromeBrush}"
+      Visibility="{x:Bind ViewModel.IsVerticalTabsPaneVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+    <!--  Vertical tabs mode's stand-in for the whole native strip.  -->
+    <Border
+      x:Name="VerticalTabsPane"
+      Grid.Row="0"
+      Grid.RowSpan="2"
+      Grid.Column="0"
+      Background="{ThemeResource WinserChromeBrush}"
+      BorderBrush="{ThemeResource WinserChromeBorderBrush}"
+      BorderThickness="0,0,1,0"
+      Visibility="{x:Bind ViewModel.IsVerticalTabsPaneVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+      PointerEntered="OnVerticalTabsPanePointerEntered"
+      PointerExited="OnVerticalTabsPanePointerExited">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  App mark, InPrivate badge, and the pin toggle - the pane's own header, matching
+              TabStripHeader/TabStripFooter's job in horizontal mode.  -->
+        <Grid
+          Grid.Row="0"
+          Height="40"
+          Padding="12,0,6,0"
+          ColumnSpacing="8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Image
+            Width="16"
+            Height="16"
+            Source="ms-appx:///Assets/Winser.png"
+            VerticalAlignment="Center" />
+          <Border
+            x:Name="VerticalPrivateBadge"
+            Grid.Column="1"
+            Padding="8,2"
+            Background="{ThemeResource WinserPrivateAccentBrush}"
+            CornerRadius="10"
+            Visibility="Collapsed"
+            VerticalAlignment="Center">
+            <TextBlock
+              FontSize="11"
+              FontWeight="SemiBold"
+              Foreground="White"
+              Text="InPrivate"
+              Visibility="{x:Bind ViewModel.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+          </Border>
+          <Button
+            Grid.Column="3"
+            Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
+            Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
+            Style="{StaticResource ToolbarIconButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
+            Visibility="{x:Bind ViewModel.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+        </Grid>
+
+        <Button
+          Grid.Row="1"
+          Margin="8,2,8,6"
+          HorizontalAlignment="Stretch"
+          HorizontalContentAlignment="Left"
+          Background="Transparent"
+          BorderThickness="0"
+          Command="{x:Bind ViewModel.AddTabCommand}"
+          ToolTipService.ToolTip="New tab (Ctrl+T)">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
+            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+          </StackPanel>
+        </Button>
+
+        <ListView
+          x:Name="VerticalTabList"
+          Grid.Row="2"
+          Padding="6,0,6,6"
+          AllowDrop="True"
+          CanReorderItems="True"
+          ItemContainerStyle="{StaticResource SidebarListItemStyle}"
+          ItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
+          SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=TwoWay}"
+          SelectionMode="Single">
+          <ListView.ItemTemplate>
+            <DataTemplate x:DataType="vm:BrowserTabViewModel">
+              <Grid ColumnSpacing="10" ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuFlyoutItem Command="{x:Bind DuplicateCommand}" Text="Duplicate tab" />
+                    <MenuFlyoutItem Command="{x:Bind ReloadOrStopCommand}" Text="Reload" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Command="{x:Bind CloseOthersCommand}" Text="Close other tabs" />
+                    <MenuFlyoutItem Command="{x:Bind CloseToTheRightCommand}" Text="Close tabs to the right" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Command="{x:Bind CloseCommand}" Text="Close tab" />
+                  </MenuFlyout>
+                </Grid.ContextFlyout>
+
+                <IconSourceElement
+                  Width="16"
+                  Height="16"
+                  IconSource="{x:Bind TabIcon, Mode=OneWay}"
+                  VerticalAlignment="Center" />
+                <TextBlock
+                  Grid.Column="1"
+                  Text="{x:Bind Title, Mode=OneWay}"
+                  TextTrimming="CharacterEllipsis"
+                  VerticalAlignment="Center"
+                  Visibility="{x:Bind Shell.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                <Button
+                  Grid.Column="2"
+                  Command="{x:Bind CloseCommand}"
+                  Content="&#xE711;"
+                  Style="{StaticResource ToolbarIconButtonStyle}"
+                  ToolTipService.ToolTip="Close tab"
+                  Visibility="{x:Bind Shell.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+              </Grid>
+            </DataTemplate>
+          </ListView.ItemTemplate>
+        </ListView>
+      </Grid>
+    </Border>
 
   </Grid>
 </Window>

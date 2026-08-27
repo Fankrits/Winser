@@ -116,6 +116,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Set(value, Values.ShowBookmarksBar, v => Values.ShowBookmarksBar = v);
     }
 
+    public bool UseVerticalTabs
+    {
+        get => Values.UseVerticalTabs;
+        set => Set(value, Values.UseVerticalTabs, v => Values.UseVerticalTabs = v);
+    }
+
     public bool OpenPopupsAsTabs
     {
         get => Values.OpenPopupsAsTabs;

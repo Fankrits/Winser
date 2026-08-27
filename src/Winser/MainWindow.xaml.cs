@@ -22,6 +22,10 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const int DefaultHeight = 860;
     private const int CascadeStep = 28;
 
+    private const double VerticalModeChromeHeight = 40;
+    private const double VerticalTabsCollapsedWidth = 48;
+    private const double VerticalTabsExpandedWidth = 240;
+
     private bool _isClosing;
     private bool _isWindowActive = true;
 
@@ -42,8 +46,10 @@ public sealed partial class MainWindow : Window, IShellWindow
         SetTitleBar(CustomDragRegion);
 
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
+        VerticalPrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
 
         ApplyTheme();
+        UpdateChromeLayout();
         AppServices.Settings.Changed += OnSettingsChanged;
 
         RootGrid.ActualThemeChanged += OnActualThemeChanged;
@@ -77,15 +83,11 @@ public sealed partial class MainWindow : Window, IShellWindow
             ? AppWindowPresenterKind.FullScreen
             : AppWindowPresenterKind.Overlapped);
 
-        // TabView renders the strip and the content in one control, so the only way to hide
-        // just the strip is to slide it above the client area. A negative top margin on a
-        // stretched child grows it by the same amount, so the page still fills the window.
-        TabStrip.Margin = fullScreen
-            ? new Thickness(0, -TabStripHeight, 0, 0)
-            : new Thickness(0);
-
         ViewModel.IsFullScreen = fullScreen;
+        UpdateChromeLayout();
     }
+
+    public void RefreshTabChrome() => UpdateChromeLayout();
 
     public void FocusAddressBar() => ViewModel.SelectedTab?.RequestAddressFocus();
 
@@ -223,11 +225,11 @@ public sealed partial class MainWindow : Window, IShellWindow
     private double _measuredTabStripHeight;
 
     /// <summary>
-    /// The tab strip's rendered height, used to slide it off-screen in full screen (see
-    /// <see cref="SetFullScreen"/>). <see cref="CustomDragRegion"/> is the TabView's
-    /// TabStripFooter, which the control renders inline in the same row as the tab headers, so
-    /// its ActualHeight after layout is the real strip height — measuring it beats guessing at
-    /// an internal theme resource key that may not exist or may not match.
+    /// The tab strip's rendered height, used to slide it off-screen in full screen or vertical
+    /// tabs mode (see <see cref="UpdateChromeLayout"/>). <see cref="CustomDragRegion"/> is the
+    /// TabView's TabStripFooter, which the control renders inline in the same row as the tab
+    /// headers, so its ActualHeight after layout is the real strip height — measuring it beats
+    /// guessing at an internal theme resource key that may not exist or may not match.
     /// </summary>
     private double TabStripHeight
     {
@@ -240,6 +242,33 @@ public sealed partial class MainWindow : Window, IShellWindow
 
             return _measuredTabStripHeight > 0 ? _measuredTabStripHeight : FallbackTabStripHeight;
         }
+    }
+
+    /// <summary>
+    /// Re-derives the vertical tabs chrome from the view model's current state: idempotent, so
+    /// every trigger (full screen, the setting flipping from another tab, the pin button, a
+    /// hover peek) can just call this rather than duplicating the layout math.
+    /// </summary>
+    private void UpdateChromeLayout()
+    {
+        var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
+
+        VerticalModeChromeRow.Height = vertical ? new GridLength(VerticalModeChromeHeight) : new GridLength(0);
+        VerticalTabsColumnDef.Width = vertical
+            ? new GridLength(ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsCollapsedWidth)
+            : new GridLength(0);
+
+        // TabView renders the strip and the content in one control, so the only way to hide
+        // just the strip - for full screen, or because the vertical pane is standing in for it -
+        // is to slide it above the client area. A negative top margin on a stretched child grows
+        // it by the same amount, so it still fills its cell either way.
+        TabStrip.Margin = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs
+            ? new Thickness(0, -TabStripHeight, 0, 0)
+            : new Thickness(0);
+
+        // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
+        // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
+        SetTitleBar(vertical ? VerticalModeDragRegion : CustomDragRegion);
     }
 
     private void ApplyTheme() =>
@@ -301,4 +330,11 @@ public sealed partial class MainWindow : Window, IShellWindow
             ViewModel.CloseTab(tab);
         }
     }
+
+    /// <summary>Peeks the collapsed vertical tabs rail open while the pointer is over it.</summary>
+    private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e) =>
+        ViewModel.IsVerticalTabsPointerOver = true;
+
+    private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
+        ViewModel.IsVerticalTabsPointerOver = false;
 }

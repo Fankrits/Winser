@@ -54,4 +54,6 @@ public static class Glyphs
     public const string Shield = "\uEA18";
     public const string Cast = "\uE7F4";
     public const string Color = "\uE790";
+    public const string Pin = "\uE718";
+    public const string Unpin = "\uE77A";
 }

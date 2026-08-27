@@ -41,6 +41,15 @@ public sealed class AppSettings
 
     public bool ShowBookmarksBar { get; set; } = true;
 
+    /// <summary>Tabs in a collapsible pane on the side instead of a strip across the top.</summary>
+    public bool UseVerticalTabs { get; set; }
+
+    /// <summary>
+    /// When vertical tabs are on: whether the pane stays expanded, rather than collapsing to an
+    /// icon-only rail that only expands while the pointer is over it.
+    /// </summary>
+    public bool VerticalTabsPinned { get; set; } = true;
+
     /// <summary>Open <c>window.open</c> popups as tabs instead of letting sites spawn windows.</summary>
     public bool OpenPopupsAsTabs { get; set; } = true;
 

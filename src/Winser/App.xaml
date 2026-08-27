@@ -94,8 +94,8 @@
         <Setter Property="Margin" Value="0,0,0,4" />
       </Style>
 
-      <!--  A row in the winser://settings sidebar.  -->
-      <Style x:Key="SettingsNavItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+      <!--  A row in a left-side ListView: the winser://settings sidebar, the vertical tab list.  -->
+      <Style x:Key="SidebarListItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
         <Setter Property="Margin" Value="0,1" />
         <Setter Property="Padding" Value="12,9" />
         <Setter Property="CornerRadius" Value="6" />

@@ -34,7 +34,7 @@
 
         <ListView
           x:Name="SectionList"
-          ItemContainerStyle="{StaticResource SettingsNavItemStyle}"
+          ItemContainerStyle="{StaticResource SidebarListItemStyle}"
           ItemsSource="{x:Bind ViewModel.Sections}"
           SelectedIndex="0"
           SelectionChanged="OnSectionSelectionChanged"
@@ -94,6 +94,25 @@
               <ToggleSwitch
                 Grid.Column="1"
                 IsOn="{x:Bind ViewModel.ShowBookmarksBar, Mode=TwoWay}"
+                OffContent=""
+                OnContent=""
+                VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
+          <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
+            <Grid ColumnSpacing="16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Show tabs on the side" TextWrapping="Wrap" />
+                <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Moves tabs into a collapsible pane on the left instead of a strip across the top." TextWrapping="Wrap" />
+              </StackPanel>
+              <ToggleSwitch
+                Grid.Column="1"
+                IsOn="{x:Bind ViewModel.UseVerticalTabs, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
                 VerticalAlignment="Center" />
