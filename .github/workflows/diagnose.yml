@@ -1,13 +1,13 @@
 name: diagnose
 
-# Experimental, one-off: an attempt to close the plan's empirical verification gaps (memory
-# measurements, a visual look at Mica, a few runtime shortcuts) from CI instead of a human's
-# hands, since GitHub's windows-latest runners are real interactive Windows sessions with
-# Edge/WebView2 preinstalled (confirmed against actions/runner-images' own manifest) rather
-# than the headless Session-0-only boxes they're sometimes assumed to be. Everything it drives
-# is done with SendKeys against shortcuts read directly out of BrowserViewModel.HandleShortcut,
-# not guessed. Not wired into build.yml or release.yml - this is diagnostic, not a gate, and
-# is expected to need iteration.
+# Drives a real Winser instance on a real Windows session - GitHub's windows-latest runners
+# are interactive, with Edge/WebView2 preinstalled (confirmed against actions/runner-images'
+# own manifest), not the headless Session-0-only boxes "windows-latest" is sometimes assumed to
+# mean. Every
+# key combination is read out of BrowserViewModel.HandleShortcut, not guessed. Produces the
+# numbers in README.md's Memory section and the screenshots referenced there. Diagnostic, not
+# a gate: not wired into build.yml or release.yml, and safe to re-run whenever a change in this
+# area (freeze, discard, the idle sweep) needs the same kind of answer again.
 on:
   push:
     branches: ["claude/windows-browser-winui3-rt6irp"]
@@ -53,20 +53,17 @@ jobs:
         run: |
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-          # Run #2 showed only one tab ever existed (diagnostics.log: "tabs=1" on every sweep
-          # tick) despite nine Ctrl+T sequences being sent - so nothing after the first was
-          # actually reaching the window. WScript.Shell.AppActivate wraps SetForegroundWindow,
-          # which Windows' focus-stealing prevention can silently refuse for a window owned by
-          # a process this script only just started - a well-known failure mode for exactly
-          # this launch-then-SendKeys pattern, not something AppActivate reports as failing.
-          # AllowSetForegroundWindow is the actual, documented way to grant a specific process
-          # permission to take focus; calling SetForegroundWindow directly afterwards (rather
-          # than through the older COM wrapper) removes the layer that was hiding whether it
-          # worked.
-          # A multi-line here-string won't work here: PowerShell 7 requires its closing "@ at
-          # column 1 with no leading whitespace, which a YAML block scalar can't provide
-          # without ending the block early (confirmed by trying it - "White space is not
-          # allowed before the string terminator"). One line avoids the conflict entirely.
+          # WScript.Shell.AppActivate wraps SetForegroundWindow, which Windows' focus-stealing
+          # prevention can silently refuse for a window owned by a process this script only
+          # just started - AppActivate has no way to report that refusal, so SendKeys can send
+          # into nothing without any error. AllowSetForegroundWindow (called once, right after
+          # Start-Process) is the documented way to grant that process permission to take focus;
+          # calling SetForegroundWindow directly afterwards, rather than through the COM
+          # wrapper, means a failure to activate at least surfaces as a warning.
+          #
+          # One line rather than a here-string: PowerShell 7 requires a here-string's closing
+          # "@ at column 1 with no leading whitespace, which a YAML block scalar can't provide
+          # without ending the block early.
           Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int dwProcessId); }'
           $shots = New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\diagnostics"
 

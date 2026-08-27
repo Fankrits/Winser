@@ -363,10 +363,6 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     /// </remarks>
     public async Task<bool> TryDiscardAsync()
     {
-        DiagnosticLog.Write(
-            $"TryDiscardAsync '{Title}': IsWeb={IsWeb} IsAudioPlaying={IsAudioPlaying} " +
-            $"hostIsNull={_host is null} hostIsReady={_host?.IsReady}");
-
         if (!IsWeb || IsAudioPlaying || _host is not { IsReady: true } host)
         {
             return false;
@@ -379,11 +375,9 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
         {
-            DiagnosticLog.Write($"TryDiscardAsync '{Title}': ExecuteScriptAsync threw {ex.GetType().Name}");
             return false;
         }
 
-        DiagnosticLog.Write($"TryDiscardAsync '{Title}': hasInput={hasInput}");
         if (hasInput == "true")
         {
             return false;

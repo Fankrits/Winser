@@ -278,6 +278,30 @@ you are *not* looking at, and that is where nearly all of a browser's memory act
 Winser's own managed footprint is small and stays bounded: history is capped at 10,000 entries,
 and everything persisted is a plain JSON file written by a debounced atomic replace.
 
+### Measured
+
+Real numbers, not estimates: 10 tabs opened on a fresh profile, `Get-Process msedgewebview2 |
+Measure-Object WorkingSet64 -Sum` sampled at each stage, discard threshold temporarily set to
+1 minute so the run finishes in CI time rather than the real 30-minute default.
+
+| Checkpoint | MB | msedgewebview2 processes |
+|---|---:|---:|
+| 10 tabs open | 484.7 | 15 |
+| Background nine frozen | 453.3 | 15 |
+| Background nine discarded | 193.9 | 6 |
+| Returned to a discarded tab | 261.4 | 7 |
+
+Discard closed exactly the nine processes it should have and cut memory by 57%. Freeze's ~6%
+is a smaller number than the feature is capable of by construction: all ten tabs loaded the
+same static, script-light page, which has little to suspend - a real page doing continuous
+work (a timer, a video, a live feed) has more to give back. Returning to a discarded tab costs
+one fresh renderer process, matching the documented "reload, not resume" behavior above.
+
+Measured by driving a real, unattended Winser instance on a GitHub Actions `windows-latest`
+runner via `.github/workflows/diagnose.yml`, which also screenshots Mica, the find bar, zoom,
+and full screen, and prints `diagnostics.log` to the job summary - useful again the next time
+a change in this area needs the same kind of answer.
+
 ## Security
 
 The new tab page runs as web content, not as part of the shell, so everything it can ask

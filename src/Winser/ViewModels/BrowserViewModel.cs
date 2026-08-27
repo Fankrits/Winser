@@ -352,7 +352,6 @@ public sealed partial class BrowserViewModel : ObservableObject
     private async void OnIdleSweepTick(object? sender, object e)
     {
         var minutes = AppServices.Settings.Current.DiscardIdleTabsAfterMinutes;
-        DiagnosticLog.Write($"idle sweep: tick, minutes={minutes}, HasActiveDownloads={HasActiveDownloads}, tabs={Tabs.Count}");
 
         // Downloads aren't tracked per tab (DownloadRecord has no owning-tab reference), so the
         // precise rule - never discard the tab a running download belongs to - isn't something
@@ -368,18 +367,12 @@ public sealed partial class BrowserViewModel : ObservableObject
         var cutoff = DateTimeOffset.UtcNow.AddMinutes(-minutes);
         foreach (var tab in Tabs.ToList())
         {
-            var idleSeconds = (DateTimeOffset.UtcNow - tab.LastActiveUtc).TotalSeconds;
-            var isSelected = ReferenceEquals(tab, SelectedTab);
-            DiagnosticLog.Write(
-                $"idle sweep: tab '{tab.Title}' idleSeconds={idleSeconds:0} isSelected={isSelected} " +
-                $"willSkip={isSelected || tab.LastActiveUtc > cutoff}");
             if (ReferenceEquals(tab, SelectedTab) || tab.LastActiveUtc > cutoff)
             {
                 continue;
             }
 
-            var discarded = await tab.TryDiscardAsync();
-            DiagnosticLog.Write($"idle sweep: tab '{tab.Title}' TryDiscardAsync returned {discarded}");
+            await tab.TryDiscardAsync();
         }
     }
 
