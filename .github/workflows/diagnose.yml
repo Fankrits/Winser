@@ -129,8 +129,13 @@ jobs:
           $results.AfterFreeze = Measure-WebView2
           Write-Host ("After freeze: {0} MB across {1} processes" -f $results.AfterFreeze.MB, $results.AfterFreeze.Count)
 
-          Write-Host "Waiting 75s for the 1-minute discard threshold..."
-          Start-Sleep -Seconds 75
+          # 150s rather than 75s: the idle sweep only runs once a minute
+          # (BrowserViewModel.IdleSweepInterval), so a single 75s wait can land between two
+          # ticks depending on exactly when in the timer's phase it started - not long enough
+          # to say for certain the sweep had a real chance to run. 150s guarantees at least two
+          # full ticks have occurred regardless of phase.
+          Write-Host "Waiting 150s for the 1-minute discard threshold (at least two sweep ticks)..."
+          Start-Sleep -Seconds 150
           $results.AfterDiscard = Measure-WebView2
           Write-Host ("After discard: {0} MB across {1} processes" -f $results.AfterDiscard.MB, $results.AfterDiscard.Count)
 
@@ -152,6 +157,22 @@ jobs:
           $summary += "Screenshots are attached as the diagnostics-screenshots artifact."
           $summary | Out-File -Append $env:GITHUB_STEP_SUMMARY
           $summary | Out-String | Write-Host
+
+          # DiagnosticLog.Write is an immediate, unbuffered append (File.AppendAllText per
+          # call - see Services/DiagnosticLog.cs), so this is current as of the moment it's
+          # read, no flush-timing race to worry about.
+          $logPath = Join-Path $env:LOCALAPPDATA 'Winser\Data\diagnostics.log'
+          if (Test-Path $logPath) {
+              Write-Host "`n=== diagnostics.log ==="
+              Get-Content $logPath | Write-Host
+              "## diagnostics.log" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              Get-Content $logPath | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          } else {
+              Write-Warning "No diagnostics.log found at $logPath"
+          }
 
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Name msedgewebview2 -Force -ErrorAction SilentlyContinue
