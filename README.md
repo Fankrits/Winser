@@ -171,18 +171,42 @@ artifact, it just skips creating a Release.
 ## Installing a release
 
 Because the certificate above is self-signed, Windows won't trust the package until that same
-certificate is trusted on the installing machine - once, not per update. Export the public half
-(never the `.pfx` - that holds the private key) and import it as Administrator:
+certificate is trusted on the installing machine - once per machine, not per update. Every
+release publishes three files together for exactly this reason:
+
+| File | What it is |
+|---|---|
+| `Winser-<tag>-x64.msix` | The app |
+| `Winser-<tag>.cer` | The public half of the signing certificate (no private key - safe to hand out) |
+| `install-winser.ps1` | Trusts the certificate, then installs the package |
+
+Download all three into the same folder, then right-click `install-winser.ps1` → **Run with
+PowerShell** (as Administrator) - it finds the `.cer` and `.msix` next to itself, imports the
+certificate to `Cert:\LocalMachine\TrustedPeople`, and installs the package in one step. No
+other setup needed on the machine installing it.
+
+If you'd rather see (or run) each step by hand instead of trusting a script, this is exactly
+what `install-winser.ps1` does:
 
 ```powershell
-Export-Certificate -Cert $cert -FilePath WinserSigning.cer
 Import-Certificate -FilePath WinserSigning.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+Add-AppxPackage -Path Winser-<tag>-x64.msix
 ```
 
-After that, double-clicking the `.msix` installs Winser like any other Windows app - Start menu
-entry, normal uninstall from Settings, no SmartScreen "unrecognized publisher" prompt, since
-that check is for standalone EXE/MSI downloads and MSIX installation verifies the package
-signature instead.
+Got the "publisher certificate could not be verified" error (`0x800B010A`) from double-clicking
+the `.msix` directly, without the certificate step first? That's this trust step, not run yet -
+either run `install-winser.ps1`, or the two commands above. If you no longer have the `.cer`
+file, pull the certificate straight back out of the `.msix` instead of hunting for it:
+
+```powershell
+$sig = Get-AuthenticodeSignature -FilePath Winser-<tag>-x64.msix
+$sig.SignerCertificate | Export-Certificate -FilePath WinserSigning.cer
+```
+
+Once trusted, Winser installs and uninstalls like any other Windows app - Start menu entry,
+normal removal from Settings, no SmartScreen "unrecognized publisher" prompt, since that check
+is for standalone EXE/MSI downloads and MSIX installation verifies the package signature
+instead.
 
 ## Size
 

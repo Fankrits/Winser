@@ -106,10 +106,42 @@ jobs:
           "MSIX_PATH=$dest" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "Packaged $dest ($([math]::Round($msix.Length / 1MB, 1)) MB)"
 
+      # Reads the certificate straight back out of the .msix that was just signed, rather than
+      # re-opening the .pfx with the password again - the exported .cer is then guaranteed to
+      # be exactly the certificate that actually signed this file, not a second copy that could
+      # in principle drift from it. This .cer (public key only, no private key - safe to publish
+      # openly, unlike the .pfx) is what install-winser.ps1 imports to LocalMachine\TrustedPeople
+      # on whatever device it's run on.
+      #
+      # Checking for SignerCertificate rather than a specific $sig.Status: this runner has no
+      # more reason to trust a self-signed cert than any other machine does, so status is
+      # expected to read as something other than Valid here regardless of whether signing
+      # actually succeeded - the certificate being present is what actually answers that.
+      - name: Export the public certificate for distribution
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature -FilePath "${{ env.MSIX_PATH }}"
+          if (-not $sig.SignerCertificate) {
+            Write-Error "Get-AuthenticodeSignature found no certificate on ${{ env.MSIX_PATH }} (status: $($sig.Status)) - packaging may not have signed it."
+            exit 1
+          }
+
+          $certPath = "Winser-$env:RELEASE_TAG.cer"
+          Export-Certificate -Cert $sig.SignerCertificate -FilePath $certPath | Out-Null
+          "CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Exported $certPath (Subject: $($sig.SignerCertificate.Subject))"
+
+      # Three explicit paths rather than a glob: PowerShell doesn't expand wildcards in an
+      # external command's arguments the way bash does, so gh would receive the literal
+      # asterisk instead of the files it matches. Every path here is already known exactly,
+      # so there is nothing a glob would add anyway.
       - uses: actions/upload-artifact@v4
         with:
           name: Winser-${{ env.RELEASE_TAG }}-x64-msix
-          path: ${{ env.MSIX_PATH }}
+          path: |
+            ${{ env.MSIX_PATH }}
+            ${{ env.CERT_PATH }}
+            packaging/install-winser.ps1
 
       - name: Create the GitHub release
         if: github.ref_type == 'tag'
@@ -118,5 +150,7 @@ jobs:
         run: >
           gh release create ${{ github.ref_name }}
           "${{ env.MSIX_PATH }}"
+          "${{ env.CERT_PATH }}"
+          packaging/install-winser.ps1
           --title "${{ github.ref_name }}"
-          --notes "Self-signed MSIX. Before installing for the first time, trust the signing certificate once - see README.md#installing-a-release for the exact command."
+          --notes "Self-signed MSIX. Download all three files (.msix, .cer, install-winser.ps1) into the same folder, then right-click install-winser.ps1 -> Run with PowerShell as Administrator - it trusts the certificate and installs the package in one step. See README.md#installing-a-release for the manual commands if you'd rather not run a script."
