@@ -53,4 +53,5 @@ public static class Glyphs
     public const string Reader = "\uE736";
     public const string Shield = "\uEA18";
     public const string Cast = "\uE7F4";
+    public const string Color = "\uE790";
 }
