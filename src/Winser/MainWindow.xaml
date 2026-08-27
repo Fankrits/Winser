@@ -148,7 +148,7 @@
       Grid.Row="0"
       Grid.Column="1"
       Background="{ThemeResource WinserChromeBrush}"
-      Visibility="{x:Bind ViewModel.IsVerticalTabsPaneVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+      Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
 
     <!--  Vertical tabs mode's stand-in for the whole native strip.  -->
     <Border
@@ -159,7 +159,7 @@
       Background="{ThemeResource WinserChromeBrush}"
       BorderBrush="{ThemeResource WinserChromeBorderBrush}"
       BorderThickness="0,0,1,0"
-      Visibility="{x:Bind ViewModel.IsVerticalTabsPaneVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}"
+      Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}"
       PointerEntered="OnVerticalTabsPanePointerEntered"
       PointerExited="OnVerticalTabsPanePointerExited">
       <Grid>
@@ -200,7 +200,7 @@
               FontWeight="SemiBold"
               Foreground="White"
               Text="InPrivate"
-              Visibility="{x:Bind ViewModel.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+              Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
           </Border>
           <Button
             Grid.Column="3"
@@ -208,7 +208,7 @@
             Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
             Style="{StaticResource ToolbarIconButtonStyle}"
             ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+            Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
         </Grid>
 
         <Button
@@ -222,7 +222,7 @@
           ToolTipService.ToolTip="New tab (Ctrl+T)">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
-            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
           </StackPanel>
         </Button>
 
@@ -234,7 +234,8 @@
           CanReorderItems="True"
           ItemContainerStyle="{StaticResource SidebarListItemStyle}"
           ItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
-          SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=TwoWay}"
+          SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=OneWay}"
+          SelectionChanged="OnVerticalTabSelectionChanged"
           SelectionMode="Single">
           <ListView.ItemTemplate>
             <DataTemplate x:DataType="vm:BrowserTabViewModel">
@@ -267,14 +268,14 @@
                   Text="{x:Bind Title, Mode=OneWay}"
                   TextTrimming="CharacterEllipsis"
                   VerticalAlignment="Center"
-                  Visibility="{x:Bind Shell.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
                 <Button
                   Grid.Column="2"
                   Command="{x:Bind CloseCommand}"
                   Content="&#xE711;"
                   Style="{StaticResource ToolbarIconButtonStyle}"
                   ToolTipService.ToolTip="Close tab"
-                  Visibility="{x:Bind Shell.IsVerticalTabsExpanded, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
               </Grid>
             </DataTemplate>
           </ListView.ItemTemplate>

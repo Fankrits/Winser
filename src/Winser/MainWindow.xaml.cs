@@ -337,4 +337,19 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
         ViewModel.IsVerticalTabsPointerOver = false;
+
+    /// <summary>
+    /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to
+    /// react to ViewModel.SelectedTab changing elsewhere, but two TwoWay x:Bind bindings to the
+    /// same property in one Window's binding scope is exactly the shape that trips known x:Bind
+    /// codegen bugs (microsoft-ui-xaml#8441 and others) - so only TabStrip's original binding
+    /// stays TwoWay, and this list writes back explicitly instead.
+    /// </summary>
+    private void OnVerticalTabSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if ((sender as ListView)?.SelectedItem is BrowserTabViewModel tab)
+        {
+            ViewModel.SelectedTab = tab;
+        }
+    }
 }

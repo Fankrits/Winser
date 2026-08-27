@@ -46,7 +46,8 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
-    [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible), nameof(IsVerticalTabsPaneVisible))]
+    [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility))]
     public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
@@ -54,17 +55,17 @@ public sealed partial class BrowserViewModel : ObservableObject
     public partial bool ShowBookmarksBar { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility))]
     public partial bool UseVerticalTabs { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
     [NotifyPropertyChangedFor(nameof(PinGlyph), nameof(PinTooltip))]
     public partial bool IsVerticalTabsPinned { get; set; }
 
     /// <summary>True while the pointer is over the collapsed vertical tabs rail, expanding it as a peek.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
     public partial bool IsVerticalTabsPointerOver { get; set; }
 
     [ObservableProperty]
@@ -116,6 +117,14 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     /// <summary>Pinned open, or currently being peeked at via hover.</summary>
     public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver;
+
+    // x:Bind cannot use a Converter anywhere in a Window's own binding scope: the compiler emits
+    // a call to SetConverterLookupRoot(this), and Window - unlike Page or UserControl - is not a
+    // FrameworkElement, so that call fails to compile (microsoft-ui-xaml#5902, #6369). Exposing
+    // the already-converted Visibility here is the documented workaround.
+    public Visibility VerticalTabsPaneVisibility => IsVerticalTabsPaneVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VerticalTabsExpandedVisibility => IsVerticalTabsExpanded ? Visibility.Visible : Visibility.Collapsed;
 
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
