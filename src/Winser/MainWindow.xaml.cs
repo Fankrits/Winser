@@ -22,7 +22,13 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const int DefaultHeight = 860;
     private const int CascadeStep = 28;
 
-    private const double VerticalTabsHoverZoneWidth = 8;
+    // 16, not something thinner: Windows reserves roughly the outer 8px of every edge of a
+    // resizable window for its own invisible resize-drag hit-testing (WM_NCHITTEST), handled
+    // before a pointer event ever reaches XAML. A hover-zone at or below that width can end up
+    // entirely inside the OS's resize border, where PointerEntered never fires at all - which
+    // is indistinguishable from "vertical tabs doesn't work" from the pointer's own vantage
+    // point. The extra margin is free: this strip is fully transparent regardless of width.
+    private const double VerticalTabsHoverZoneWidth = 16;
     private const double VerticalTabsExpandedWidth = 240;
 
     private bool _isClosing;
