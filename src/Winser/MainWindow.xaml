@@ -29,16 +29,19 @@
     Column 0 exists for vertical tabs mode only: a pane on the left standing in for the
     horizontal strip. It is sized to zero and collapses to nothing when vertical tabs are off,
     which is also the default - so nothing here changes horizontal mode's geometry. When vertical
-    tabs is on, this column is always just wide enough for VerticalTabsPane's own hover-detection
-    strip (VerticalTabsHoverZoneWidth) - constant regardless of whether the pane is expanded -
-    because the pane overlays wider than its own column when expanded rather than the column
-    growing to fit it, which is what keeps TabStrip's content from ever resizing as the pane
-    opens and closes (see VerticalTabsPane's own comment below). TabStrip's own Grid.Column never
-    changes between modes and it deliberately has no Grid.Row at all - its cell must stay
-    anchored at y=0 in both modes, since that is what lets a negative top margin (see
-    MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully off-screen above the
-    window rather than just far enough to clear a reserved row; the vertical mode drag region is
-    a same-origin overlay, not a second row, for the same y=0 reason - see its own comment below.
+    tabs is on, this column's width tracks VerticalTabsPane's own width - the hover-zone width
+    collapsed, VerticalTabsExpandedWidth once expanded (see MainWindow.xaml.cs,
+    UpdateChromeLayout) - so TabStrip's column, and the page rendered inside it, genuinely shift
+    over as the pane opens and closes. An overlay that left this column alone and let the pane
+    bleed into TabStrip's space instead was tried first; on a real machine the live page painted
+    straight over it regardless, because WebContentView.xaml.cs hosts WebView2 in its default
+    child-HWND mode, which always wins that fight against XAML z-order, popup or plain sibling
+    alike. TabStrip's own Grid.Column never changes between modes and it deliberately has no
+    Grid.Row at all - its cell must stay anchored at y=0 in both modes, since that is what lets a
+    negative top margin (see MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully
+    off-screen above the window rather than just far enough to clear a reserved row; the vertical
+    mode drag region is a same-origin overlay, not a second row, for the same y=0 reason - see its
+    own comment below.
   -->
   <Grid x:Name="RootGrid" Background="Transparent">
     <Grid.ColumnDefinitions>
@@ -169,15 +172,12 @@
       This outer Grid is the one continuous hit-test surface for the whole collapsed/expanded
       lifecycle - it is never replaced by a second, different element - specifically so a hover
       hand-off between two overlapping elements is not a scenario that can ever arise. Its own
-      Width is set from code (VerticalTabsExpandedWidth or VerticalTabsHoverZoneWidth), not the
-      column's: VerticalTabsColumnDef only ever reserves the tiny hover-zone width whenever
-      vertical tabs is on, constant regardless of expanded state, so TabStrip's content never
-      resizes or reflows as the pane opens and closes. Expanding therefore means this Grid
-      renders wider than its own column and bleeds into TabStrip's column instead - the same
-      "Grid does not clip a child to its cell" behavior the strip-hiding trick above already
-      relies on - which is what makes it a true floating overlay rather than a resize. Background
-      is Transparent so the collapsed hover-zone shows nothing at all, not even a thin rail; the
-      actual visible chrome lives in the child Border below, shown only once truly expanded.
+      Width is set from code (VerticalTabsExpandedWidth or VerticalTabsHoverZoneWidth) and always
+      matches VerticalTabsColumnDef's width exactly - see MainWindow.xaml.cs,
+      UpdateChromeLayout, and RootGrid's own comment above for why this resizes TabStrip's
+      column rather than overlaying it without moving it. Background is Transparent so the
+      collapsed hover-zone shows nothing at all, not even a thin rail; the actual visible chrome
+      lives in the child Border below, shown only once truly expanded.
     -->
     <Grid
       x:Name="VerticalTabsPane"

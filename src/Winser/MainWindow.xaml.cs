@@ -285,13 +285,19 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void UpdateChromeLayout()
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
+        var paneWidth = ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsHoverZoneWidth;
 
-        // Only ever the hover-zone width, never the expanded width: VerticalTabsPane's own Width
-        // (set below) is what grows to cover more space when expanded, overlaying TabStrip's
-        // column instead of resizing it, so the page underneath never reflows just because the
-        // pane opened or closed.
-        VerticalTabsColumnDef.Width = vertical ? new GridLength(VerticalTabsHoverZoneWidth) : new GridLength(0);
-        VerticalTabsPane.Width = ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsHoverZoneWidth;
+        // The column tracks the pane's own width exactly, rather than staying fixed at the
+        // hover-zone width while the pane overlays wider than it. That overlay approach was
+        // tried first and confirmed broken on a real machine: WebContentView.xaml.cs hosts
+        // WebView2 in its default child-HWND mode (see CreateBrowserElement), which always
+        // paints on top of any XAML layered above it regardless of z-order in this tree - so the
+        // live page painted straight over the pane's own chrome the moment it expanded into
+        // TabStrip's column. Resizing the column instead keeps the two rectangles from ever
+        // overlapping, at the cost of the page's own column genuinely narrowing for as long as
+        // the pane stays open.
+        VerticalTabsColumnDef.Width = vertical ? new GridLength(paneWidth) : new GridLength(0);
+        VerticalTabsPane.Width = paneWidth;
 
         // TabView renders the strip and the content in one control, so the only way to hide
         // just the strip - for full screen, or because the vertical pane is standing in for it -
@@ -306,14 +312,11 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         // The vertical mode drag region overlays the same top strip TabStrip just vacated,
         // rather than reserving it, so it needs to match that same height to look intentional.
-        // Its left edge is pushed out to where the pane's own expanded width ends, always -
-        // not just the 8px hover-zone column it nominally sits next to - so the registered drag
-        // rect never overlaps the pane's header (app icon, pin button) once expanded. XAML hit-
-        // testing likely already resolves that overlap correctly in the pin button's favor, but
-        // there is no way to verify that without a Windows machine to click it on, so removing
-        // the overlap entirely is the safer bet over trusting it.
+        // No left-edge offset is needed here: VerticalModeDragRegion is Grid.Column="1", and
+        // that column now starts wherever VerticalTabsColumnDef ends, so it already clears the
+        // pane's header (app icon, pin button) whether collapsed or expanded without any
+        // compensating Margin.
         VerticalModeDragRegion.Height = TabStripHeight;
-        VerticalModeDragRegion.Margin = new Thickness(VerticalTabsExpandedWidth - VerticalTabsHoverZoneWidth, 0, 0, 0);
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
