@@ -22,7 +22,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const int DefaultHeight = 860;
     private const int CascadeStep = 28;
 
-    private const double VerticalTabsCollapsedWidth = 48;
+    private const double VerticalTabsHoverZoneWidth = 8;
     private const double VerticalTabsExpandedWidth = 240;
 
     private bool _isClosing;
@@ -92,8 +92,16 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         if (ViewModel.UseVerticalTabs)
         {
-            VerticalAddressBox.Focus(FocusState.Programmatic);
-            VerticalAddressBox.FindDescendant<TextBox>()?.SelectAll();
+            // Collapsed, the pane (and this address bar inside it) is not visible and cannot
+            // accept focus at all. Flagging it open takes effect through a binding, which needs
+            // a layout pass to actually happen before Focus() has anything to land on - the same
+            // reason BrowserTabPage.xaml.cs's own FindBar focus defers through the dispatcher.
+            ViewModel.IsVerticalTabsAddressBarFocused = true;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                VerticalAddressBox.Focus(FocusState.Programmatic);
+                VerticalAddressBox.FindDescendant<TextBox>()?.SelectAll();
+            });
         }
         else
         {
@@ -272,9 +280,12 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
 
-        VerticalTabsColumnDef.Width = vertical
-            ? new GridLength(ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsCollapsedWidth)
-            : new GridLength(0);
+        // Only ever the hover-zone width, never the expanded width: VerticalTabsPane's own Width
+        // (set below) is what grows to cover more space when expanded, overlaying TabStrip's
+        // column instead of resizing it, so the page underneath never reflows just because the
+        // pane opened or closed.
+        VerticalTabsColumnDef.Width = vertical ? new GridLength(VerticalTabsHoverZoneWidth) : new GridLength(0);
+        VerticalTabsPane.Width = ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsHoverZoneWidth;
 
         // TabView renders the strip and the content in one control, so the only way to hide
         // just the strip - for full screen, or because the vertical pane is standing in for it -
@@ -289,7 +300,14 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         // The vertical mode drag region overlays the same top strip TabStrip just vacated,
         // rather than reserving it, so it needs to match that same height to look intentional.
+        // Its left edge is pushed out to where the pane's own expanded width ends, always -
+        // not just the 8px hover-zone column it nominally sits next to - so the registered drag
+        // rect never overlaps the pane's header (app icon, pin button) once expanded. XAML hit-
+        // testing likely already resolves that overlap correctly in the pin button's favor, but
+        // there is no way to verify that without a Windows machine to click it on, so removing
+        // the overlap entirely is the safer bet over trusting it.
         VerticalModeDragRegion.Height = TabStripHeight;
+        VerticalModeDragRegion.Margin = new Thickness(VerticalTabsExpandedWidth - VerticalTabsHoverZoneWidth, 0, 0, 0);
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
@@ -356,7 +374,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
     }
 
-    /// <summary>Peeks the collapsed vertical tabs rail open while the pointer is over it.</summary>
+    /// <summary>Peeks the collapsed vertical tabs pane open while the pointer is over it.</summary>
     private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e) =>
         ViewModel.IsVerticalTabsPointerOver = true;
 
@@ -415,6 +433,11 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnVerticalAddressGotFocus(object sender, RoutedEventArgs e)
     {
+        // Also covers clicking straight into an already hover-revealed address bar (not just
+        // Ctrl+L, which sets this itself before focus can even land): either way, the pane needs
+        // to stay open regardless of hover for as long as this box is being edited.
+        ViewModel.IsVerticalTabsAddressBarFocused = true;
+
         if (ViewModel.SelectedTab is { } tab)
         {
             tab.IsAddressFocused = true;
@@ -423,6 +446,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnVerticalAddressLostFocus(object sender, RoutedEventArgs e)
     {
+        ViewModel.IsVerticalTabsAddressBarFocused = false;
+
         if (ViewModel.SelectedTab is not { } tab)
         {
             return;

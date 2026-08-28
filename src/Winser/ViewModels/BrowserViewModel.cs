@@ -48,6 +48,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
     public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
@@ -56,17 +57,31 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
     public partial bool UseVerticalTabs { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
     [NotifyPropertyChangedFor(nameof(PinGlyph), nameof(PinTooltip))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
     public partial bool IsVerticalTabsPinned { get; set; }
 
-    /// <summary>True while the pointer is over the collapsed vertical tabs rail, expanding it as a peek.</summary>
+    /// <summary>True while the pointer is over the collapsed vertical tabs hover-zone, expanding the pane as a peek.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
     public partial bool IsVerticalTabsPointerOver { get; set; }
+
+    /// <summary>
+    /// True while the vertical pane's own address bar has focus. Folded into
+    /// <see cref="IsVerticalTabsExpanded"/> so the pane stays open across a hover ending
+    /// mid-edit, and so Ctrl+L can reach an address bar that starts out fully collapsed:
+    /// focusing it needs it visible first, and hovering is not itself a keyboard-reachable action.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
+    public partial bool IsVerticalTabsAddressBarFocused { get; set; }
 
     [ObservableProperty]
     public partial bool HasActiveDownloads { get; set; }
@@ -122,8 +137,17 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// </summary>
     public bool IsToolbarVisible => !IsFullScreen && !UseVerticalTabs;
 
-    /// <summary>Pinned open, or currently being peeked at via hover.</summary>
-    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver;
+    /// <summary>Pinned open, actively being peeked at via hover, or its address bar has focus.</summary>
+    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver || IsVerticalTabsAddressBarFocused;
+
+    /// <summary>
+    /// Whether the pane's actual chrome - background, header, nav row, address bar, tab list -
+    /// should render at all. Collapsed, vertical tabs shows nothing, not even an icon rail, so
+    /// this is false there even though the pane's own Grid is still present in the visual tree
+    /// (see MainWindow.xaml): that Grid keeps a small hit-testable area regardless, since once
+    /// every visible pixel is gone nothing else is left to notice the pointer arriving.
+    /// </summary>
+    public bool IsVerticalTabsPaneExpanded => IsVerticalTabsPaneVisible && IsVerticalTabsExpanded;
 
     // x:Bind cannot use a Converter anywhere in a Window's own binding scope: the compiler emits
     // a call to SetConverterLookupRoot(this), and Window - unlike Page or UserControl - is not a
@@ -132,6 +156,8 @@ public sealed partial class BrowserViewModel : ObservableObject
     public Visibility VerticalTabsPaneVisibility => IsVerticalTabsPaneVisible ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility VerticalTabsExpandedVisibility => IsVerticalTabsExpanded ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VerticalTabsPaneExpandedVisibility => IsVerticalTabsPaneExpanded ? Visibility.Visible : Visibility.Collapsed;
 
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
@@ -164,15 +190,21 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
-    // All three drive the window's pixel-level layout (pane width, drag region, whether the
+    // All four drive the window's pixel-level layout (pane width, drag region, whether the
     // native strip is hidden), which lives on the window rather than here. Routing every write
     // through RefreshTabChrome - rather than only the ones a window event handler starts - covers
-    // UseVerticalTabs flipping from winser://settings, in a different tab entirely.
+    // UseVerticalTabs flipping from winser://settings, in a different tab entirely. Without this,
+    // IsVerticalTabsAddressBarFocused in particular would flip the pane's chrome to Visible (via
+    // VerticalTabsPaneExpandedVisibility) while MainWindow.xaml.cs's imperative VerticalTabsPane.Width
+    // stayed stuck at the collapsed hover-zone width - i.e. Ctrl+L would make the address bar
+    // "visible" inside an 8px-wide sliver.
     partial void OnUseVerticalTabsChanged(bool value) => _window?.RefreshTabChrome();
 
     partial void OnIsVerticalTabsPinnedChanged(bool value) => _window?.RefreshTabChrome();
 
     partial void OnIsVerticalTabsPointerOverChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsAddressBarFocusedChanged(bool value) => _window?.RefreshTabChrome();
 
     /// <summary>The owning window's HWND, for WinRT pickers that need an owner.</summary>
     public nint WindowHandle => _window?.WindowHandle ?? IntPtr.Zero;

@@ -28,14 +28,17 @@
 
     Column 0 exists for vertical tabs mode only: a pane on the left standing in for the
     horizontal strip. It is sized to zero and collapses to nothing when vertical tabs are off,
-    which is also the default - so nothing here changes horizontal mode's geometry. TabStrip's
-    own Grid.Column never changes between modes and it deliberately has no Grid.Row at all - its
-    cell must stay anchored at y=0 in both modes, since that is what lets a negative top margin
-    (see MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully off-screen above the
-    window rather than just far enough to clear a reserved row. Only VerticalTabsColumnDef's
-    width changes at runtime, which is what pushes TabStrip's cell (and everything to its right)
-    around; the vertical mode drag region is a same-origin overlay, not a second row, for the
-    same y=0 reason - see its own comment below.
+    which is also the default - so nothing here changes horizontal mode's geometry. When vertical
+    tabs is on, this column is always just wide enough for VerticalTabsPane's own hover-detection
+    strip (VerticalTabsHoverZoneWidth) - constant regardless of whether the pane is expanded -
+    because the pane overlays wider than its own column when expanded rather than the column
+    growing to fit it, which is what keeps TabStrip's content from ever resizing as the pane
+    opens and closes (see VerticalTabsPane's own comment below). TabStrip's own Grid.Column never
+    changes between modes and it deliberately has no Grid.Row at all - its cell must stay
+    anchored at y=0 in both modes, since that is what lets a negative top margin (see
+    MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully off-screen above the
+    window rather than just far enough to clear a reserved row; the vertical mode drag region is
+    a same-origin overlay, not a second row, for the same y=0 reason - see its own comment below.
   -->
   <Grid x:Name="RootGrid" Background="Transparent">
     <Grid.ColumnDefinitions>
@@ -160,16 +163,35 @@
       Background="{ThemeResource WinserChromeBrush}"
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
 
-    <!--  Vertical tabs mode's stand-in for the whole native strip.  -->
-    <Border
+    <!--
+      Vertical tabs mode's stand-in for the whole native strip.
+
+      This outer Grid is the one continuous hit-test surface for the whole collapsed/expanded
+      lifecycle - it is never replaced by a second, different element - specifically so a hover
+      hand-off between two overlapping elements is not a scenario that can ever arise. Its own
+      Width is set from code (VerticalTabsExpandedWidth or VerticalTabsHoverZoneWidth), not the
+      column's: VerticalTabsColumnDef only ever reserves the tiny hover-zone width whenever
+      vertical tabs is on, constant regardless of expanded state, so TabStrip's content never
+      resizes or reflows as the pane opens and closes. Expanding therefore means this Grid
+      renders wider than its own column and bleeds into TabStrip's column instead - the same
+      "Grid does not clip a child to its cell" behavior the strip-hiding trick above already
+      relies on - which is what makes it a true floating overlay rather than a resize. Background
+      is Transparent so the collapsed hover-zone shows nothing at all, not even a thin rail; the
+      actual visible chrome lives in the child Border below, shown only once truly expanded.
+    -->
+    <Grid
       x:Name="VerticalTabsPane"
       Grid.Column="0"
-      Background="{ThemeResource WinserChromeBrush}"
-      BorderBrush="{ThemeResource WinserChromeBorderBrush}"
-      BorderThickness="0,0,1,0"
+      HorizontalAlignment="Left"
+      Background="Transparent"
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}"
       PointerEntered="OnVerticalTabsPanePointerEntered"
       PointerExited="OnVerticalTabsPanePointerExited">
+      <Border
+        Background="{ThemeResource WinserChromeBrush}"
+        BorderBrush="{ThemeResource WinserChromeBorderBrush}"
+        BorderThickness="0,0,1,0"
+        Visibility="{x:Bind ViewModel.VerticalTabsPaneExpandedVisibility, Mode=OneWay}">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
@@ -369,7 +391,8 @@
           </ListView.ItemTemplate>
         </ListView>
       </Grid>
-    </Border>
+      </Border>
+    </Grid>
 
   </Grid>
 </Window>
