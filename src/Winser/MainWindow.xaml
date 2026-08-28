@@ -29,19 +29,16 @@
     Column 0 exists for vertical tabs mode only: a pane on the left standing in for the
     horizontal strip. It is sized to zero and collapses to nothing when vertical tabs are off,
     which is also the default - so nothing here changes horizontal mode's geometry. When vertical
-    tabs is on, this column's width tracks VerticalTabsPane's own width - the hover-zone width
-    collapsed, VerticalTabsExpandedWidth once expanded (see MainWindow.xaml.cs,
-    UpdateChromeLayout) - so TabStrip's column, and the page rendered inside it, genuinely shift
-    over as the pane opens and closes. An overlay that left this column alone and let the pane
-    bleed into TabStrip's space instead was tried first; on a real machine the live page painted
-    straight over it regardless, because WebContentView.xaml.cs hosts WebView2 in its default
-    child-HWND mode, which always wins that fight against XAML z-order, popup or plain sibling
-    alike. TabStrip's own Grid.Column never changes between modes and it deliberately has no
-    Grid.Row at all - its cell must stay anchored at y=0 in both modes, since that is what lets a
-    negative top margin (see MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully
-    off-screen above the window rather than just far enough to clear a reserved row; the vertical
-    mode drag region is a same-origin overlay, not a second row, for the same y=0 reason - see its
-    own comment below.
+    tabs is on, this column is only ever as wide as the pane's hover zone
+    (VerticalTabsHoverZoneWidth) - it never grows, not even while the pane is open, because the
+    open pane is a separate top-level window floating above this one rather than anything laid out
+    in this Grid (see VerticalTabsPane below, and VerticalTabsOverlayWindow). That is what keeps
+    the page from resizing when the pane opens. TabStrip's own Grid.Column never changes between
+    modes and it deliberately has no Grid.Row at all - its cell must stay anchored at y=0 in both
+    modes, since that is what lets a negative top margin (see MainWindow.xaml.cs,
+    UpdateChromeLayout) push the native strip fully off-screen above the window rather than just
+    far enough to clear a reserved row; the vertical mode drag region is a same-origin overlay,
+    not a second row, for the same y=0 reason - see its own comment below.
   -->
   <Grid x:Name="RootGrid" Background="Transparent">
     <Grid.ColumnDefinitions>
@@ -167,232 +164,24 @@
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
 
     <!--
-      Vertical tabs mode's stand-in for the whole native strip.
+      Vertical tabs mode's hover zone: a narrow, fully transparent strip down the left edge whose
+      only job is to notice the pointer arriving and ask for the pane.
 
-      This outer Grid is the one continuous hit-test surface for the whole collapsed/expanded
-      lifecycle - it is never replaced by a second, different element - specifically so a hover
-      hand-off between two overlapping elements is not a scenario that can ever arise. Its own
-      Width is set from code (VerticalTabsExpandedWidth or VerticalTabsHoverZoneWidth) and always
-      matches VerticalTabsColumnDef's width exactly - see MainWindow.xaml.cs,
-      UpdateChromeLayout, and RootGrid's own comment above for why this resizes TabStrip's
-      column rather than overlaying it without moving it. Background is Transparent so the
-      collapsed hover-zone shows nothing at all, not even a thin rail; the actual visible chrome
-      lives in the child Border below, shown only once truly expanded.
+      The pane's actual chrome is deliberately not here. It lives in VerticalTabsOverlayWindow, a
+      separate owned top-level window, because WebView2 is hosted in its default child-HWND mode
+      (WebContentView.xaml.cs, CreateBrowserElement) and a child HWND paints over any XAML sibling
+      in the same window regardless of z-order - so a pane rendered inline here was invisible the
+      moment it overlapped the page, which is exactly what an overlay has to do. Keeping only this
+      strip inline means VerticalTabsColumnDef never has to grow past the hover-zone width, so
+      TabStrip's column - and the page inside it - never resizes when the pane opens or closes.
     -->
     <Grid
       x:Name="VerticalTabsPane"
       Grid.Column="0"
-      HorizontalAlignment="Left"
       Background="Transparent"
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}"
       PointerEntered="OnVerticalTabsPanePointerEntered"
-      PointerExited="OnVerticalTabsPanePointerExited">
-      <Border
-        Background="{ThemeResource WinserChromeBrush}"
-        BorderBrush="{ThemeResource WinserChromeBorderBrush}"
-        BorderThickness="0,0,1,0"
-        Visibility="{x:Bind ViewModel.VerticalTabsPaneExpandedVisibility, Mode=OneWay}">
-      <Grid>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <!--  App mark, InPrivate badge, and the pin toggle - the pane's own header, matching
-              TabStripHeader/TabStripFooter's job in horizontal mode.  -->
-        <Grid
-          Grid.Row="0"
-          Height="40"
-          Padding="12,0,6,0"
-          ColumnSpacing="8">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <Image
-            Width="16"
-            Height="16"
-            Source="ms-appx:///Assets/Winser.png"
-            VerticalAlignment="Center" />
-          <Border
-            x:Name="VerticalPrivateBadge"
-            Grid.Column="1"
-            Padding="8,2"
-            Background="{ThemeResource WinserPrivateAccentBrush}"
-            CornerRadius="10"
-            Visibility="Collapsed"
-            VerticalAlignment="Center">
-            <TextBlock
-              FontSize="11"
-              FontWeight="SemiBold"
-              Foreground="White"
-              Text="InPrivate"
-              Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-          </Border>
-          <Button
-            Grid.Column="3"
-            Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
-            Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-        </Grid>
-
-        <!--  Nav buttons and address bar, standing in for BrowserTabPage's own toolbar (hidden
-              while vertical tabs is on, see BrowserViewModel.IsToolbarVisible) - both act on
-              whichever tab is currently selected, so every binding here is explicitly OneWay:
-              SelectedTab changes as the user switches tabs, unlike BrowserTabPage's own ViewModel,
-              which is fixed to one tab for that page's whole lifetime.  -->
-        <Grid
-          Grid.Row="1"
-          Margin="8,4,8,0"
-          ColumnSpacing="2"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <Button
-            Grid.Column="0"
-            AutomationProperties.Name="Back"
-            Command="{x:Bind ViewModel.SelectedTab.GoBackCommand, Mode=OneWay}"
-            Content="&#xE72B;"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="Back (Alt+Left)" />
-          <Button
-            Grid.Column="1"
-            AutomationProperties.Name="Forward"
-            Command="{x:Bind ViewModel.SelectedTab.GoForwardCommand, Mode=OneWay}"
-            Content="&#xE72A;"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="Forward (Alt+Right)" />
-          <Button
-            Grid.Column="2"
-            AutomationProperties.Name="Reload"
-            Command="{x:Bind ViewModel.SelectedTab.ReloadOrStopCommand, Mode=OneWay}"
-            Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
-        </Grid>
-
-        <AutoSuggestBox
-          x:Name="VerticalAddressBox"
-          Grid.Row="2"
-          Height="32"
-          Margin="8,4"
-          CornerRadius="16"
-          ItemsSource="{x:Bind ViewModel.SelectedTab.Suggestions, Mode=OneWay}"
-          PlaceholderText="Search or enter web address"
-          Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
-          TextMemberPath="Text"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}"
-          GotFocus="OnVerticalAddressGotFocus"
-          LostFocus="OnVerticalAddressLostFocus"
-          QuerySubmitted="OnVerticalAddressQuerySubmitted"
-          TextChanged="OnVerticalAddressTextChanged">
-          <AutoSuggestBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:AddressSuggestion">
-              <Grid Padding="0,3" ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <FontIcon
-                  FontSize="14"
-                  Glyph="{x:Bind Glyph}"
-                  Opacity="0.65"
-                  VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1">
-                  <TextBlock Text="{x:Bind Text}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock
-                    Opacity="0.6"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="{x:Bind Description}"
-                    TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-              </Grid>
-            </DataTemplate>
-          </AutoSuggestBox.ItemTemplate>
-        </AutoSuggestBox>
-
-        <Button
-          Grid.Row="3"
-          Margin="8,2,8,6"
-          HorizontalAlignment="Stretch"
-          HorizontalContentAlignment="Left"
-          Background="Transparent"
-          BorderThickness="0"
-          Command="{x:Bind ViewModel.AddTabCommand}"
-          ToolTipService.ToolTip="New tab (Ctrl+T)">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
-            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-          </StackPanel>
-        </Button>
-
-        <ListView
-          x:Name="VerticalTabList"
-          Grid.Row="4"
-          Padding="6,0,6,6"
-          AllowDrop="True"
-          CanReorderItems="True"
-          ItemContainerStyle="{StaticResource SidebarListItemStyle}"
-          ItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
-          SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=OneWay}"
-          SelectionChanged="OnVerticalTabSelectionChanged"
-          SelectionMode="Single">
-          <ListView.ItemTemplate>
-            <DataTemplate x:DataType="vm:BrowserTabViewModel">
-              <Grid ColumnSpacing="10" ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Grid.ContextFlyout>
-                  <MenuFlyout>
-                    <MenuFlyoutItem Command="{x:Bind DuplicateCommand}" Text="Duplicate tab" />
-                    <MenuFlyoutItem Command="{x:Bind ReloadOrStopCommand}" Text="Reload" />
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Command="{x:Bind CloseOthersCommand}" Text="Close other tabs" />
-                    <MenuFlyoutItem Command="{x:Bind CloseToTheRightCommand}" Text="Close tabs to the right" />
-                    <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Command="{x:Bind CloseCommand}" Text="Close tab" />
-                  </MenuFlyout>
-                </Grid.ContextFlyout>
-
-                <IconSourceElement
-                  Width="16"
-                  Height="16"
-                  IconSource="{x:Bind TabIcon, Mode=OneWay}"
-                  VerticalAlignment="Center" />
-                <TextBlock
-                  Grid.Column="1"
-                  Text="{x:Bind Title, Mode=OneWay}"
-                  TextTrimming="CharacterEllipsis"
-                  VerticalAlignment="Center"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-                <Button
-                  Grid.Column="2"
-                  Command="{x:Bind CloseCommand}"
-                  Content="&#xE711;"
-                  Style="{StaticResource ToolbarIconButtonStyle}"
-                  ToolTipService.ToolTip="Close tab"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-              </Grid>
-            </DataTemplate>
-          </ListView.ItemTemplate>
-        </ListView>
-      </Grid>
-      </Border>
-    </Grid>
+      PointerExited="OnVerticalTabsPanePointerExited" />
 
   </Grid>
 </Window>
