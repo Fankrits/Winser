@@ -105,10 +105,9 @@
       <!--
         The vertical tab list only: a larger corner radius than the shared SidebarListItemStyle
         (which winser://settings' own sidebar also uses and keeps its current radius). The
-        selected-row pill styling that used to live here as a second Setter moved to
-        VerticalTabList.Resources in VerticalTabsOverlayWindow.xaml - Resources is not a
-        DependencyProperty, so a Style Setter cannot target it at all (WMC0095), only
-        property-element syntax directly on the element it belongs to.
+        matching selected-row pill lives on VerticalTabList.Resources in MainWindow.xaml rather
+        than here as a second Setter - Resources is not a DependencyProperty, so a Style Setter
+        cannot target it at all (WMC0095), only property-element syntax on the element itself.
       -->
       <Style x:Key="VerticalTabItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SidebarListItemStyle}">
         <Setter Property="CornerRadius" Value="8" />

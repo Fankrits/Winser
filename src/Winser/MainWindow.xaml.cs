@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -32,29 +31,8 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsHoverZoneWidth = 16;
     private const double VerticalTabsExpandedWidth = 240;
 
-    /// <summary>
-    /// Gap between the expanded pane and the owner's top, left, and bottom edges - the pane
-    /// floats over the page rather than docking flush against the window frame, matching the
-    /// rounded corners VerticalTabsOverlayWindow's constructor sets up (which only read as
-    /// intentional once there is actually a gap for them to show against).
-    /// </summary>
-    private const double VerticalTabsPaneMargin = 10;
-
-    /// <summary>
-    /// Grace period between the pointer leaving the vertical tabs hover surface and the pane
-    /// actually collapsing - long enough to cover the gap while the pointer crosses from the
-    /// strip into the pane's own window, which are two separate windows exchanging leave and
-    /// enter events with no ordering guarantee. See NotifyVerticalTabsPointerExited.
-    /// </summary>
-    private const int VerticalTabsCollapseDelayMs = 250;
-
     private bool _isClosing;
     private bool _isWindowActive = true;
-
-    /// <summary>Created on first use: only vertical tabs mode ever needs it.</summary>
-    private VerticalTabsOverlayWindow? _overlay;
-
-    private DispatcherTimer? _verticalTabsCollapseTimer;
 
     public MainWindow(bool isPrivate = false, string? initialUrl = null)
     {
@@ -72,9 +50,8 @@ public sealed partial class MainWindow : Window, IShellWindow
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(CustomDragRegion);
 
-        // The vertical pane's own copy of this badge is set by VerticalTabsOverlayWindow, which
-        // reads IsPrivate off this window when it is created.
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
+        VerticalPrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
 
         ApplyTheme();
         UpdateChromeLayout();
@@ -82,14 +59,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         RootGrid.ActualThemeChanged += OnActualThemeChanged;
         RootGrid.PreviewKeyDown += OnPreviewKeyDown;
-        RootGrid.SizeChanged += (_, _) =>
-        {
-            UpdateCaptionInset();
-
-            // The pane is a free-floating window, so nothing repositions it on the owner's behalf
-            // the way layout would for an inline child - it has to be told, on every resize.
-            UpdateVerticalTabsOverlay();
-        };
+        RootGrid.SizeChanged += (_, _) => UpdateCaptionInset();
 
         RestorePlacement();
         Activated += OnFirstActivated;
@@ -128,12 +98,16 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         if (ViewModel.UseVerticalTabs)
         {
-            // Collapsed, the pane's window is hidden and the address bar inside it cannot accept
-            // focus at all. Flagging it open puts the pane up (via UpdateChromeLayout below) and,
-            // unlike a hover peek, activates it - keyboard input needs a foreground window.
+            // Collapsed, the pane (and this address bar inside it) is not visible and cannot
+            // accept focus at all. Flagging it open takes effect through a binding, which needs
+            // a layout pass to actually happen before Focus() has anything to land on - the same
+            // reason BrowserTabPage.xaml.cs's own FindBar focus defers through the dispatcher.
             ViewModel.IsVerticalTabsAddressBarFocused = true;
-            UpdateVerticalTabsOverlay(activate: true);
-            _overlay?.FocusAddressBar();
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                VerticalAddressBox.Focus(FocusState.Programmatic);
+                VerticalAddressBox.FindDescendant<TextBox>()?.SelectAll();
+            });
         }
         else
         {
@@ -172,13 +146,6 @@ public sealed partial class MainWindow : Window, IShellWindow
         {
             UpdateMemoryPressure();
         }
-
-        // Dragging the window moves its client area out from under the pane, which - being its own
-        // top-level window - does not come along by itself.
-        if (args.DidPositionChange || args.DidSizeChange)
-        {
-            UpdateVerticalTabsOverlay();
-        }
     }
 
     /// <summary>
@@ -213,14 +180,6 @@ public sealed partial class MainWindow : Window, IShellWindow
         RootGrid.PreviewKeyDown -= OnPreviewKeyDown;
         Activated -= OnActivationChanged;
         AppWindow.Changed -= OnAppWindowChanged;
-
-        _verticalTabsCollapseTimer?.Stop();
-        _verticalTabsCollapseTimer = null;
-
-        // Owned windows are destroyed with their owner anyway, but closing it explicitly keeps
-        // that from depending on teardown order - and stops a stray pane outliving its window.
-        _overlay?.Close();
-        _overlay = null;
 
         ViewModel.Detach();
         WindowManager.Unregister(this);
@@ -326,11 +285,19 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void UpdateChromeLayout()
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
+        var paneWidth = ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsHoverZoneWidth;
 
-        // Constant at the hover-zone width whenever vertical tabs is on: the expanded pane is a
-        // separate window floating above this one (see UpdateVerticalTabsOverlay), so nothing in
-        // this Grid ever has to make room for it and the page never resizes when it opens.
-        VerticalTabsColumnDef.Width = vertical ? new GridLength(VerticalTabsHoverZoneWidth) : new GridLength(0);
+        // The column tracks the pane's own width exactly, rather than staying fixed at the
+        // hover-zone width while the pane overlays wider than it. That overlay approach was
+        // tried first and confirmed broken on a real machine: WebContentView.xaml.cs hosts
+        // WebView2 in its default child-HWND mode (see CreateBrowserElement), which always
+        // paints on top of any XAML layered above it regardless of z-order in this tree - so the
+        // live page painted straight over the pane's own chrome the moment it expanded into
+        // TabStrip's column. Resizing the column instead keeps the two rectangles from ever
+        // overlapping, at the cost of the page's own column genuinely narrowing for as long as
+        // the pane stays open.
+        VerticalTabsColumnDef.Width = vertical ? new GridLength(paneWidth) : new GridLength(0);
+        VerticalTabsPane.Width = paneWidth;
 
         // TabView renders the strip and the content in one control, so the only way to hide
         // just the strip - for full screen, or because the vertical pane is standing in for it -
@@ -345,62 +312,15 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         // The vertical mode drag region overlays the same top strip TabStrip just vacated,
         // rather than reserving it, so it needs to match that same height to look intentional.
-        // It needs no left-edge offset to keep clear of the pane's header (app icon, pin button):
-        // the expanded pane is a window of its own sitting above this one, so it takes that input
-        // itself rather than competing with a drag region registered underneath it.
+        // No left-edge offset is needed here: VerticalModeDragRegion is Grid.Column="1", and
+        // that column now starts wherever VerticalTabsColumnDef ends, so it already clears the
+        // pane's header (app icon, pin button) whether collapsed or expanded without any
+        // compensating Margin.
         VerticalModeDragRegion.Height = TabStripHeight;
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
         SetTitleBar(vertical ? VerticalModeDragRegion : CustomDragRegion);
-
-        UpdateVerticalTabsOverlay();
-    }
-
-    /// <summary>
-    /// Brings the floating pane up, puts it where it belongs, or takes it away - whichever the
-    /// view model's current state calls for. Safe to call for any reason at any time; it derives
-    /// everything and does nothing if the pane should not be showing.
-    /// </summary>
-    private void UpdateVerticalTabsOverlay(bool activate = false)
-    {
-        if (!ViewModel.IsVerticalTabsPaneExpanded)
-        {
-            _overlay?.HideOverlay();
-            return;
-        }
-
-        // Before the first layout pass there is no client rectangle to line the pane up with, so
-        // there is nothing meaningful to place yet - and showing it anyway would put an unpositioned
-        // window on screen. OnFirstActivated re-runs this once real bounds exist.
-        if (RootGrid.ActualHeight <= 0)
-        {
-            return;
-        }
-
-        var overlay = EnsureOverlay();
-        overlay.ApplyTheme(RootGrid.RequestedTheme);
-
-        // Clamped to the owner's own width, not just the constant: on a narrow or snapped window
-        // (or a small-screen device) a fixed 240px pane would otherwise hang off the right edge
-        // of the window itself rather than shrinking to fit it. Only the left margin comes out of
-        // the budget - the trailing edge floats freely over the page, nothing there to clear.
-        var width = Math.Min(VerticalTabsExpandedWidth, Math.Max(0, RootGrid.ActualWidth - VerticalTabsPaneMargin));
-        var height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
-        overlay.SyncBounds(width, height, VerticalTabsPaneMargin, RasterizationScale);
-        overlay.ShowOverlay(activate);
-    }
-
-    private VerticalTabsOverlayWindow EnsureOverlay() =>
-        _overlay ??= new VerticalTabsOverlayWindow(this, ViewModel);
-
-    private double RasterizationScale
-    {
-        get
-        {
-            var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
-            return scale > 0 ? scale : 1.0;
-        }
     }
 
     private void ApplyTheme() =>
@@ -408,13 +328,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnSettingsChanged(object? sender, EventArgs e) => ApplyTheme();
 
-    private void OnActualThemeChanged(FrameworkElement sender, object args)
-    {
+    private void OnActualThemeChanged(FrameworkElement sender, object args) =>
         ThemeHelper.UpdateCaptionButtons(RootGrid, AppWindow);
-
-        // A separate window does not inherit the owner's theme, so it has to be told.
-        _overlay?.ApplyTheme(RootGrid.RequestedTheme);
-    }
 
     /// <summary>Keeps the tab strip from sliding underneath the system caption buttons.</summary>
     private void UpdateCaptionInset()
@@ -468,109 +383,88 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
     }
 
-    // ------------------------------------------------------------- vertical tabs hover
-    //
-    // The hover zone and the pane it reveals live in two different windows, so the pointer
-    // crossing from one to the other produces a leave on the first and an enter on the second
-    // with no ordering guarantee between them - and, if the pane appears directly underneath a
-    // stationary cursor, possibly no enter at all until the mouse next moves. Collapsing straight
-    // off a leave event would therefore flicker, or oscillate: pane hides, cursor is back over the
-    // strip, pane shows, repeat.
-    //
-    // So a leave only ever *schedules* a collapse, and the collapse itself checks where the
-    // pointer actually is at that moment rather than trusting the events to have told the whole
-    // story.
-
     /// <summary>Peeks the collapsed vertical tabs pane open while the pointer is over it.</summary>
     private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e) =>
-        NotifyVerticalTabsPointerEntered();
+        ViewModel.IsVerticalTabsPointerOver = true;
 
     private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
-        NotifyVerticalTabsPointerExited();
-
-    /// <summary>Called by the hover strip here and by the pane's own window.</summary>
-    internal void NotifyVerticalTabsPointerEntered()
-    {
-        _verticalTabsCollapseTimer?.Stop();
-        ViewModel.IsVerticalTabsPointerOver = true;
-    }
-
-    /// <summary>Called by the hover strip here and by the pane's own window.</summary>
-    internal void NotifyVerticalTabsPointerExited()
-    {
-        _verticalTabsCollapseTimer ??= CreateVerticalTabsCollapseTimer();
-        _verticalTabsCollapseTimer.Stop();
-        _verticalTabsCollapseTimer.Start();
-    }
-
-    private DispatcherTimer CreateVerticalTabsCollapseTimer()
-    {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VerticalTabsCollapseDelayMs) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-
-            // Still hovering something that counts? Then the leave that scheduled this was just
-            // the pointer moving between the strip and the pane, and there is nothing to do.
-            if (IsPointerOverVerticalTabs())
-            {
-                timer.Start();
-                return;
-            }
-
-            ViewModel.IsVerticalTabsPointerOver = false;
-        };
-
-        return timer;
-    }
+        ViewModel.IsVerticalTabsPointerOver = false;
 
     /// <summary>
-    /// Whether the cursor is inside either half of the vertical tabs hover surface - the pane's
-    /// own window, or the strip down the owner's left edge - asked of the OS directly rather than
-    /// inferred from enter/leave events that cross a window boundary.
+    /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to
+    /// react to ViewModel.SelectedTab changing elsewhere, but two TwoWay x:Bind bindings to the
+    /// same property in one Window's binding scope is exactly the shape that trips known x:Bind
+    /// codegen bugs (microsoft-ui-xaml#8441 and others) - so only TabStrip's original binding
+    /// stays TwoWay, and this list writes back explicitly instead.
     /// </summary>
-    private bool IsPointerOverVerticalTabs()
+    private void OnVerticalTabSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!GetCursorPos(out var cursor))
+        if ((sender as ListView)?.SelectedItem is BrowserTabViewModel tab)
         {
-            // Can't tell, so don't collapse something the user may well be pointing at; a later
-            // tick will decide once the answer is knowable again.
-            return true;
+            ViewModel.SelectedTab = tab;
         }
-
-        if (_overlay?.ScreenBounds is { } pane &&
-            cursor.X >= pane.X && cursor.X < pane.X + pane.Width &&
-            cursor.Y >= pane.Y && cursor.Y < pane.Y + pane.Height)
-        {
-            return true;
-        }
-
-        var origin = default(POINT);
-        if (!ClientToScreen(WindowHandle, ref origin))
-        {
-            return false;
-        }
-
-        var scale = RasterizationScale;
-        var stripWidth = (int)Math.Round(VerticalTabsHoverZoneWidth * scale);
-        var stripHeight = (int)Math.Round(RootGrid.ActualHeight * scale);
-
-        return cursor.X >= origin.X && cursor.X < origin.X + stripWidth &&
-               cursor.Y >= origin.Y && cursor.Y < origin.Y + stripHeight;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
+    // ------------------------------------------------------- vertical tabs address bar
+    //
+    // Mirrors BrowserTabPage.xaml.cs's OnAddress* handlers exactly, retargeted from a fixed
+    // per-tab ViewModel to ViewModel.SelectedTab, since this one address bar serves whichever
+    // tab is currently selected rather than belonging to a single tab's own page.
+
+    private void OnVerticalAddressTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        public int X;
-        public int Y;
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            ViewModel.SelectedTab?.UpdateSuggestions(sender.Text);
+        }
     }
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetCursorPos(out POINT point);
+    private void OnVerticalAddressQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (ViewModel.SelectedTab is not { } tab)
+        {
+            return;
+        }
 
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ClientToScreen(nint hWnd, ref POINT point);
+        if (args.ChosenSuggestion is AddressSuggestion suggestion)
+        {
+            tab.NavigateResolved(suggestion.Target);
+        }
+        else
+        {
+            tab.Navigate(args.QueryText);
+        }
+
+        tab.IsAddressFocused = false;
+        tab.Suggestions.Clear();
+        tab.FocusWebContent();
+    }
+
+    private void OnVerticalAddressGotFocus(object sender, RoutedEventArgs e)
+    {
+        // Also covers clicking straight into an already hover-revealed address bar (not just
+        // Ctrl+L, which sets this itself before focus can even land): either way, the pane needs
+        // to stay open regardless of hover for as long as this box is being edited.
+        ViewModel.IsVerticalTabsAddressBarFocused = true;
+
+        if (ViewModel.SelectedTab is { } tab)
+        {
+            tab.IsAddressFocused = true;
+        }
+    }
+
+    private void OnVerticalAddressLostFocus(object sender, RoutedEventArgs e)
+    {
+        ViewModel.IsVerticalTabsAddressBarFocused = false;
+
+        if (ViewModel.SelectedTab is not { } tab)
+        {
+            return;
+        }
+
+        tab.IsAddressFocused = false;
+
+        // Put back whatever the page's real address is if the edit was abandoned.
+        VerticalAddressBox.Text = UrlHelper.ForDisplay(tab.Url);
+    }
 }
