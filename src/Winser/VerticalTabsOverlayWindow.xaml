@@ -43,15 +43,17 @@
     properties for exactly this reason.
   -->
   <!--
-    BorderThickness is on all four sides, not just the trailing edge: SyncBounds insets this
-    whole window from the owner's top/left/bottom by VerticalTabsPaneMargin now, so every edge is
-    a real edge floating over the page rather than flush against the owner window's own frame.
+    No border at all, deliberately. A 1px WinserChromeBorderBrush edge was tried here (all four
+    sides, once SyncBounds started insetting this window from the owner's edges) and read as a
+    distinct white outline rather than a subtle one: at 9% white on a dark panel it is already
+    lighter than the fill, and it lands exactly where DWM's corner rounding clips the window, so
+    its anti-aliased ends brighten further. The corner rounding and the acrylic fill define this
+    pane's edge on their own; the system's own border is separately switched off in the
+    constructor (DWMWA_BORDER_COLOR), so nothing draws one now.
   -->
   <Grid
     x:Name="OverlayRoot"
     Background="{ThemeResource WinserChromeBrush}"
-    BorderBrush="{ThemeResource WinserChromeBorderBrush}"
-    BorderThickness="1"
     PointerEntered="OnPointerEnteredOverlay"
     PointerExited="OnPointerExitedOverlay">
     <Grid.RowDefinitions>

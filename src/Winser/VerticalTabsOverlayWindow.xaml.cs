@@ -74,9 +74,10 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         // A custom corner preference makes DWM start drawing its own default window border - a
         // thin, near-white line traced around the whole rectangle - where a square-cornered
         // borderless window would not have shown one. That border belongs to ordinary top-level
-        // windows the user resizes and moves; this pane is neither, and already has its own edge
-        // (the acrylic fill and the 1px BorderBrush on OverlayRoot), so the system one is
-        // switched off outright rather than recolored to match.
+        // windows the user resizes and moves; this pane is neither, and its acrylic fill and
+        // rounded corners define its edge on their own (OverlayRoot deliberately draws no border
+        // of its own either - see the XAML), so the system one is switched off outright rather
+        // than recolored to match.
         var borderColor = DWMWA_COLOR_NONE;
         DwmSetWindowAttribute(WindowHandle, DWMWA_BORDER_COLOR, ref borderColor, sizeof(uint));
 
