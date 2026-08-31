@@ -19,6 +19,18 @@
           <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="#000000" Opacity="0.09" />
           <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="#FFFFFF" />
           <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="#4F46E5" />
+          <!--  The floating vertical tabs pane. Real acrylic rather than WinserChromeBrush: that
+                one is a flat tint that only works because the chrome it fills sits over the
+                window's Mica, and the pane is a Popup with no backdrop of its own - so the same
+                brush there just reads as heavy and opaque. Acrylic blurs what is behind it, which
+                is what makes a translucent panel legible over a busy page instead of muddy.
+                FallbackColor is what shows if the material is unavailable (transparency effects
+                off, low battery), so it is set to a solid that still looks intentional.  -->
+          <AcrylicBrush
+            x:Key="WinserPaneBrush"
+            FallbackColor="#F5F5F5"
+            TintColor="#FFFFFF"
+            TintOpacity="0.3" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -26,6 +38,11 @@
           <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="#FFFFFF" Opacity="0.09" />
           <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="#202020" />
           <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="#4F46E5" />
+          <AcrylicBrush
+            x:Key="WinserPaneBrush"
+            FallbackColor="#242424"
+            TintColor="#1C1C1C"
+            TintOpacity="0.3" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -33,6 +50,8 @@
           <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
           <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
           <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+          <!--  Solid, not acrylic: high contrast has no use for a translucent panel.  -->
+          <SolidColorBrush x:Key="WinserPaneBrush" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>
 
       </ResourceDictionary.ThemeDictionaries>

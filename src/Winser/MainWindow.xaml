@@ -201,7 +201,7 @@
         IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
       <Border
         x:Name="VerticalTabsCard"
-        Background="{ThemeResource WinserChromeBrush}"
+        Background="{ThemeResource WinserPaneBrush}"
         CornerRadius="8"
         PointerEntered="OnVerticalTabsPanePointerEntered"
         PointerExited="OnVerticalTabsPanePointerExited">

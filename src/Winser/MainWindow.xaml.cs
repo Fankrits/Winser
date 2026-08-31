@@ -38,8 +38,19 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </summary>
     private const double VerticalTabsPaneMargin = 8;
 
+    /// <summary>
+    /// Grace period between the pointer leaving one half of the hover surface and the pane
+    /// actually collapsing - long enough to cover the hand-off while the pointer crosses from the
+    /// collapsed strip into the expanded card, which are separate hit-test surfaces (the card is
+    /// a windowed Popup). See OnVerticalTabsPanePointerExited.
+    /// </summary>
+    private const int VerticalTabsCollapseDelayMs = 150;
+
     private bool _isClosing;
     private bool _isWindowActive = true;
+
+    /// <summary>Created on first hover-out; see OnVerticalTabsPanePointerExited.</summary>
+    private DispatcherTimer? _verticalTabsCollapseTimer;
 
     public MainWindow(bool isPrivate = false, string? initialUrl = null)
     {
@@ -194,6 +205,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         RootGrid.PreviewKeyDown -= OnPreviewKeyDown;
         Activated -= OnActivationChanged;
         AppWindow.Changed -= OnAppWindowChanged;
+
+        _verticalTabsCollapseTimer?.Stop();
+        _verticalTabsCollapseTimer = null;
 
         ViewModel.Detach();
         WindowManager.Unregister(this);
@@ -420,11 +434,38 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     /// <summary>Peeks the collapsed vertical tabs pane open while the pointer is over it.</summary>
-    private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e) =>
-        ViewModel.IsVerticalTabsPointerOver = true;
+    // The hover surface is two elements, not one: the collapsed strip lives in this window, and
+    // the expanded card lives in a windowed Popup with its own HWND. Crossing from one to the
+    // other therefore fires an exit on the first and an enter on the second with no ordering
+    // guarantee between them, and acting on the exit directly makes the pane flicker or oscillate
+    // - close, pointer is over the strip again, open, repeat. So a leave only ever *schedules* a
+    // collapse, and any enter within the grace period cancels it. (The inline pane this replaced
+    // needed none of this: it was a single continuous element, so there was no hand-off at all.)
 
-    private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
-        ViewModel.IsVerticalTabsPointerOver = false;
+    private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        _verticalTabsCollapseTimer?.Stop();
+        ViewModel.IsVerticalTabsPointerOver = true;
+    }
+
+    private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        _verticalTabsCollapseTimer ??= CreateVerticalTabsCollapseTimer();
+        _verticalTabsCollapseTimer.Stop();
+        _verticalTabsCollapseTimer.Start();
+    }
+
+    private DispatcherTimer CreateVerticalTabsCollapseTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VerticalTabsCollapseDelayMs) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            ViewModel.IsVerticalTabsPointerOver = false;
+        };
+
+        return timer;
+    }
 
     /// <summary>
     /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to
