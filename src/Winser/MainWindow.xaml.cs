@@ -31,6 +31,13 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsHoverZoneWidth = 16;
     private const double VerticalTabsExpandedWidth = 240;
 
+    /// <summary>
+    /// Gap between the expanded pane and the window's top, left and bottom edges, so it reads as
+    /// a card floating over the page rather than a panel welded to the frame - the rounded
+    /// corners only look intentional with a gap for them to show against.
+    /// </summary>
+    private const double VerticalTabsPaneMargin = 8;
+
     private bool _isClosing;
     private bool _isWindowActive = true;
 
@@ -59,7 +66,14 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         RootGrid.ActualThemeChanged += OnActualThemeChanged;
         RootGrid.PreviewKeyDown += OnPreviewKeyDown;
-        RootGrid.SizeChanged += (_, _) => UpdateCaptionInset();
+        RootGrid.SizeChanged += (_, _) =>
+        {
+            UpdateCaptionInset();
+
+            // The popup is not laid out in this Grid, so nothing resizes it on the window's
+            // behalf the way layout would for an inline child - it has to be told, every resize.
+            UpdateVerticalTabsFlyout();
+        };
 
         RestorePlacement();
         Activated += OnFirstActivated;
@@ -285,19 +299,18 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void UpdateChromeLayout()
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
-        var paneWidth = ViewModel.IsVerticalTabsExpanded ? VerticalTabsExpandedWidth : VerticalTabsHoverZoneWidth;
 
-        // The column tracks the pane's own width exactly, rather than staying fixed at the
-        // hover-zone width while the pane overlays wider than it. That overlay approach was
-        // tried first and confirmed broken on a real machine: WebContentView.xaml.cs hosts
-        // WebView2 in its default child-HWND mode (see CreateBrowserElement), which always
-        // paints on top of any XAML layered above it regardless of z-order in this tree - so the
-        // live page painted straight over the pane's own chrome the moment it expanded into
-        // TabStrip's column. Resizing the column instead keeps the two rectangles from ever
-        // overlapping, at the cost of the page's own column genuinely narrowing for as long as
-        // the pane stays open.
-        VerticalTabsColumnDef.Width = vertical ? new GridLength(paneWidth) : new GridLength(0);
-        VerticalTabsPane.Width = paneWidth;
+        // Constant at the hover-zone width whenever vertical tabs is on: the expanded chrome is a
+        // windowed Popup (see the XAML), which is not laid out in this Grid at all, so nothing
+        // here has to make room for it and the page never shifts when the pane opens. An earlier
+        // attempt did widen this column to match, which avoided the airspace problem by keeping
+        // the two rectangles from overlapping - at the cost of reflowing the page every time the
+        // pane was hovered. The popup gets its own HWND above WebView2's instead, so overlapping
+        // is fine now.
+        VerticalTabsColumnDef.Width = vertical ? new GridLength(VerticalTabsHoverZoneWidth) : new GridLength(0);
+        VerticalTabsPane.Width = VerticalTabsHoverZoneWidth;
+
+        UpdateVerticalTabsFlyout();
 
         // TabView renders the strip and the content in one control, so the only way to hide
         // just the strip - for full screen, or because the vertical pane is standing in for it -
@@ -321,6 +334,29 @@ public sealed partial class MainWindow : Window, IShellWindow
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
         SetTitleBar(vertical ? VerticalModeDragRegion : CustomDragRegion);
+    }
+
+    /// <summary>
+    /// Sizes and places the floating pane. A Popup does not stretch to anything, and its offsets
+    /// are relative to where it sits in the tree - the hover strip at the client area's top-left -
+    /// so both are set here rather than in XAML, and re-set whenever the window resizes.
+    /// </summary>
+    private void UpdateVerticalTabsFlyout()
+    {
+        if (RootGrid.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        VerticalTabsFlyout.HorizontalOffset = VerticalTabsPaneMargin;
+        VerticalTabsFlyout.VerticalOffset = VerticalTabsPaneMargin;
+
+        // Clamped to the window's own size: on a narrow or short window a fixed 240px card would
+        // otherwise hang off the edge rather than shrinking to fit inside it.
+        VerticalTabsCard.Width = Math.Min(
+            VerticalTabsExpandedWidth,
+            Math.Max(0, RootGrid.ActualWidth - (VerticalTabsPaneMargin * 2)));
+        VerticalTabsCard.Height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
     }
 
     private void ApplyTheme() =>

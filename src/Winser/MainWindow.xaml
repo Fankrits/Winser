@@ -169,15 +169,23 @@
     <!--
       Vertical tabs mode's stand-in for the whole native strip.
 
-      This outer Grid is the one continuous hit-test surface for the whole collapsed/expanded
-      lifecycle - it is never replaced by a second, different element - specifically so a hover
-      hand-off between two overlapping elements is not a scenario that can ever arise. Its own
-      Width is set from code (VerticalTabsExpandedWidth or VerticalTabsHoverZoneWidth) and always
-      matches VerticalTabsColumnDef's width exactly - see MainWindow.xaml.cs,
-      UpdateChromeLayout, and RootGrid's own comment above for why this resizes TabStrip's
-      column rather than overlaying it without moving it. Background is Transparent so the
-      collapsed hover-zone shows nothing at all, not even a thin rail; the actual visible chrome
-      lives in the child Border below, shown only once truly expanded.
+      This outer Grid is only ever the collapsed hover-zone - a transparent strip, always exactly
+      VerticalTabsHoverZoneWidth wide, that shows nothing at all (not even a thin rail) and exists
+      purely to notice the pointer arriving. VerticalTabsColumnDef matches it and never grows, so
+      TabStrip's column - and the page inside it - never shifts when the pane opens.
+
+      The expanded chrome lives in the Popup below rather than inline here. ShouldConstrainToRootBounds
+      ="False" makes it a windowed popup, which gets its own HWND and so renders above WebView2's,
+      escaping the airspace problem that made a plain inline overlay invisible over a live page
+      (see UpdateChromeLayout). Unlike the owned top-level Window this used to be, a Popup has no
+      window frame for DWM to draw a border around - which is what the white outline was, through
+      three failed attempts to suppress it at the window level. Rounded corners and theme are
+      ordinary XAML here rather than DWM attributes and manual propagation.
+
+      Known trade, and the reason this route was passed over the first time: drag-and-drop inside
+      a windowed popup is broken by microsoft-ui-xaml#9276, so reordering tabs by dragging them
+      within the pane may not work. That issue predates the WinAppSDK 2.3 this project builds
+      against; if it still reproduces, reordering is the thing to give up, not the floating.
     -->
     <Grid
       x:Name="VerticalTabsPane"
@@ -187,11 +195,16 @@
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}"
       PointerEntered="OnVerticalTabsPanePointerEntered"
       PointerExited="OnVerticalTabsPanePointerExited">
+      <Popup
+        x:Name="VerticalTabsFlyout"
+        ShouldConstrainToRootBounds="False"
+        IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
       <Border
+        x:Name="VerticalTabsCard"
         Background="{ThemeResource WinserChromeBrush}"
-        BorderBrush="{ThemeResource WinserChromeBorderBrush}"
-        BorderThickness="0,0,1,0"
-        Visibility="{x:Bind ViewModel.VerticalTabsPaneExpandedVisibility, Mode=OneWay}">
+        CornerRadius="8"
+        PointerEntered="OnVerticalTabsPanePointerEntered"
+        PointerExited="OnVerticalTabsPanePointerExited">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
@@ -427,6 +440,7 @@
         </ListView>
       </Grid>
       </Border>
+      </Popup>
     </Grid>
 
   </Grid>

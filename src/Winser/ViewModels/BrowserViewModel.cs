@@ -48,7 +48,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
@@ -57,19 +57,19 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool UseVerticalTabs { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
     [NotifyPropertyChangedFor(nameof(PinGlyph), nameof(PinTooltip))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsPinned { get; set; }
 
     /// <summary>True while the pointer is over the collapsed vertical tabs hover-zone, expanding the pane as a peek.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsPointerOver { get; set; }
 
     /// <summary>
@@ -80,7 +80,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(VerticalTabsPaneExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsAddressBarFocused { get; set; }
 
     [ObservableProperty]
@@ -142,10 +142,10 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     /// <summary>
     /// Whether the pane's actual chrome - background, header, nav row, address bar, tab list -
-    /// should render at all. Collapsed, vertical tabs shows nothing, not even an icon rail, so
-    /// this is false there even though the pane's own Grid is still present in the visual tree
-    /// (see MainWindow.xaml): that Grid keeps a small hit-testable area regardless, since once
-    /// every visible pixel is gone nothing else is left to notice the pointer arriving.
+    /// should be on screen. Bound straight to the floating pane's Popup.IsOpen (see
+    /// MainWindow.xaml). Collapsed, vertical tabs shows nothing, not even an icon rail; all that
+    /// is left in the window itself is a transparent strip down the left edge, there purely to
+    /// notice the pointer arriving.
     /// </summary>
     public bool IsVerticalTabsPaneExpanded => IsVerticalTabsPaneVisible && IsVerticalTabsExpanded;
 
@@ -156,8 +156,6 @@ public sealed partial class BrowserViewModel : ObservableObject
     public Visibility VerticalTabsPaneVisibility => IsVerticalTabsPaneVisible ? Visibility.Visible : Visibility.Collapsed;
 
     public Visibility VerticalTabsExpandedVisibility => IsVerticalTabsExpanded ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility VerticalTabsPaneExpandedVisibility => IsVerticalTabsPaneExpanded ? Visibility.Visible : Visibility.Collapsed;
 
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
@@ -190,14 +188,12 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
-    // All four drive the window's pixel-level layout (pane width, drag region, whether the
-    // native strip is hidden), which lives on the window rather than here. Routing every write
-    // through RefreshTabChrome - rather than only the ones a window event handler starts - covers
-    // UseVerticalTabs flipping from winser://settings, in a different tab entirely. Without this,
-    // IsVerticalTabsAddressBarFocused in particular would flip the pane's chrome to Visible (via
-    // VerticalTabsPaneExpandedVisibility) while MainWindow.xaml.cs's imperative VerticalTabsPane.Width
-    // stayed stuck at the collapsed hover-zone width - i.e. Ctrl+L would make the address bar
-    // "visible" inside an 8px-wide sliver.
+    // All four drive the window's pixel-level layout (the hover strip's width, the drag region,
+    // whether the native strip is hidden, and the floating pane's own size and offset), which
+    // lives on the window rather than here. Routing every write through RefreshTabChrome - rather
+    // than only the ones a window event handler starts - covers UseVerticalTabs flipping from
+    // winser://settings, in a different tab entirely, and IsVerticalTabsAddressBarFocused being
+    // set by Ctrl+L before any pointer is involved.
     partial void OnUseVerticalTabsChanged(bool value) => _window?.RefreshTabChrome();
 
     partial void OnIsVerticalTabsPinnedChanged(bool value) => _window?.RefreshTabChrome();
