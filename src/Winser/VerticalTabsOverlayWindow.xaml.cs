@@ -25,6 +25,11 @@ public sealed partial class VerticalTabsOverlayWindow : Window
     private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     private const int DWMWCP_ROUNDSMALL = 3;
 
+    private const int DWMWA_BORDER_COLOR = 34;
+
+    /// <summary>Sentinel for DWMWA_BORDER_COLOR meaning "no border", not an actual color.</summary>
+    private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
+
     private readonly MainWindow _owner;
 
     public VerticalTabsOverlayWindow(MainWindow owner, BrowserViewModel viewModel)
@@ -62,6 +67,15 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         // to that would not need its own separate XAML-side clipping.
         var cornerPreference = DWMWCP_ROUNDSMALL;
         DwmSetWindowAttribute(WindowHandle, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
+
+        // A custom corner preference makes DWM start drawing its own default window border - a
+        // thin, near-white line traced around the whole rectangle - where a square-cornered
+        // borderless window would not have shown one. That border belongs to ordinary top-level
+        // windows the user resizes and moves; this pane is neither, and already has its own edge
+        // (the acrylic fill and the 1px BorderBrush on OverlayRoot), so the system one is
+        // switched off outright rather than recolored to match.
+        var borderColor = DWMWA_COLOR_NONE;
+        DwmSetWindowAttribute(WindowHandle, DWMWA_BORDER_COLOR, ref borderColor, sizeof(uint));
 
         AppWindow.Hide();
     }
@@ -250,4 +264,9 @@ public sealed partial class VerticalTabsOverlayWindow : Window
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
+
+    // Same native function as above; DWMWA_BORDER_COLOR's value is a COLORREF (a DWORD), so this
+    // overload marshals it as one instead of reusing the int one and casting the sentinel.
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref uint value, int size);
 }
