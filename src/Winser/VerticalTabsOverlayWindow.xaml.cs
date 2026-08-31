@@ -33,13 +33,6 @@ public sealed partial class VerticalTabsOverlayWindow : Window
     /// <summary>Sentinel for DWMWA_BORDER_COLOR meaning "no border", not an actual color.</summary>
     private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
 
-    /// <summary>-1 on every side means "sheet of glass": DWM extends its frame across the whole
-    /// client area, which - as a side effect - is also what makes it draw the standard drop
-    /// shadow around a borderless window (the same one every Fluent flyout and context menu
-    /// has). There is no separate, more targeted API for "just give me the shadow": this
-    /// sheet-of-glass trick is the standard one, predating DesktopAcrylicBackdrop by years.</summary>
-    private static readonly MARGINS GlassSheetMargins = new() { Left = -1, Right = -1, Top = -1, Bottom = -1 };
-
     private readonly MainWindow _owner;
 
     public VerticalTabsOverlayWindow(MainWindow owner, BrowserViewModel viewModel)
@@ -86,12 +79,6 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         // switched off outright rather than recolored to match.
         var borderColor = DWMWA_COLOR_NONE;
         DwmSetWindowAttribute(WindowHandle, DWMWA_BORDER_COLOR, ref borderColor, sizeof(uint));
-
-        // See GlassSheetMargins: this is what actually turns the corner-rounded, border-less
-        // rectangle above into something that reads as a floating card rather than a flat
-        // cutout, now that SyncBounds insets it from the owner's edges instead of sitting flush.
-        var glassMargins = GlassSheetMargins;
-        DwmExtendFrameIntoClientArea(WindowHandle, ref glassMargins);
 
         AppWindow.Hide();
     }
@@ -362,15 +349,6 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         public int Y;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MARGINS
-    {
-        public int Left;
-        public int Right;
-        public int Top;
-        public int Bottom;
-    }
-
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ClientToScreen(nint hWnd, ref POINT point);
@@ -385,7 +363,4 @@ public sealed partial class VerticalTabsOverlayWindow : Window
     // overload marshals it as one instead of reusing the int one and casting the sentinel.
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref uint value, int size);
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmExtendFrameIntoClientArea(nint hwnd, ref MARGINS margins);
 }

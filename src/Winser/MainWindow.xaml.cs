@@ -35,8 +35,8 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// <summary>
     /// Gap between the expanded pane and the owner's top, left, and bottom edges - the pane
     /// floats over the page rather than docking flush against the window frame, matching the
-    /// rounded corners and drop shadow VerticalTabsOverlayWindow's constructor now sets up (both
-    /// only read as intentional once there is actually a gap for them to show against).
+    /// rounded corners VerticalTabsOverlayWindow's constructor sets up (which only read as
+    /// intentional once there is actually a gap for them to show against).
     /// </summary>
     private const double VerticalTabsPaneMargin = 10;
 
