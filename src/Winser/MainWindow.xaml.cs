@@ -33,6 +33,14 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsExpandedWidth = 240;
 
     /// <summary>
+    /// Gap between the expanded pane and the owner's top, left, and bottom edges - the pane
+    /// floats over the page rather than docking flush against the window frame, matching the
+    /// rounded corners and drop shadow VerticalTabsOverlayWindow's constructor now sets up (both
+    /// only read as intentional once there is actually a gap for them to show against).
+    /// </summary>
+    private const double VerticalTabsPaneMargin = 10;
+
+    /// <summary>
     /// Grace period between the pointer leaving the vertical tabs hover surface and the pane
     /// actually collapsing - long enough to cover the gap while the pointer crosses from the
     /// strip into the pane's own window, which are two separate windows exchanging leave and
@@ -375,9 +383,11 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         // Clamped to the owner's own width, not just the constant: on a narrow or snapped window
         // (or a small-screen device) a fixed 240px pane would otherwise hang off the right edge
-        // of the window itself rather than shrinking to fit it.
-        var width = Math.Min(VerticalTabsExpandedWidth, RootGrid.ActualWidth);
-        overlay.SyncBounds(width, RootGrid.ActualHeight, RasterizationScale);
+        // of the window itself rather than shrinking to fit it. Only the left margin comes out of
+        // the budget - the trailing edge floats freely over the page, nothing there to clear.
+        var width = Math.Min(VerticalTabsExpandedWidth, Math.Max(0, RootGrid.ActualWidth - VerticalTabsPaneMargin));
+        var height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
+        overlay.SyncBounds(width, height, VerticalTabsPaneMargin, RasterizationScale);
         overlay.ShowOverlay(activate);
     }
 

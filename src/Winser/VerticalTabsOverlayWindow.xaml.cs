@@ -1,7 +1,10 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Winser.Helpers;
@@ -29,6 +32,13 @@ public sealed partial class VerticalTabsOverlayWindow : Window
 
     /// <summary>Sentinel for DWMWA_BORDER_COLOR meaning "no border", not an actual color.</summary>
     private const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
+
+    /// <summary>-1 on every side means "sheet of glass": DWM extends its frame across the whole
+    /// client area, which - as a side effect - is also what makes it draw the standard drop
+    /// shadow around a borderless window (the same one every Fluent flyout and context menu
+    /// has). There is no separate, more targeted API for "just give me the shadow": this
+    /// sheet-of-glass trick is the standard one, predating DesktopAcrylicBackdrop by years.</summary>
+    private static readonly MARGINS GlassSheetMargins = new() { Left = -1, Right = -1, Top = -1, Bottom = -1 };
 
     private readonly MainWindow _owner;
 
@@ -77,6 +87,12 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         var borderColor = DWMWA_COLOR_NONE;
         DwmSetWindowAttribute(WindowHandle, DWMWA_BORDER_COLOR, ref borderColor, sizeof(uint));
 
+        // See GlassSheetMargins: this is what actually turns the corner-rounded, border-less
+        // rectangle above into something that reads as a floating card rather than a flat
+        // cutout, now that SyncBounds insets it from the owner's edges instead of sitting flush.
+        var glassMargins = GlassSheetMargins;
+        DwmExtendFrameIntoClientArea(WindowHandle, ref glassMargins);
+
         AppWindow.Hide();
     }
 
@@ -88,12 +104,15 @@ public sealed partial class VerticalTabsOverlayWindow : Window
     public void ApplyTheme(ElementTheme theme) => OverlayRoot.RequestedTheme = theme;
 
     /// <summary>
-    /// Lines the pane up with the left edge of its owner's client area. Bounds are in physical
-    /// pixels while the caller thinks in DIPs, so the owner's rasterization scale is applied here;
-    /// the client origin comes from ClientToScreen rather than AppWindow.Position because the
-    /// latter is the outer frame, which includes a resize border this pane must sit inside of.
+    /// Lines the pane up near the top-left of its owner's client area, inset by
+    /// <paramref name="marginDips"/> on the top and left - the trailing (right) edge gets no
+    /// matching inset, since there is no owner edge there to float clear of; it simply ends
+    /// wherever the pane's own width puts it, over the page. Bounds are in physical pixels while
+    /// the caller thinks in DIPs, so the owner's rasterization scale is applied here; the client
+    /// origin comes from ClientToScreen rather than AppWindow.Position because the latter is the
+    /// outer frame, which includes a resize border this pane must sit inside of.
     /// </summary>
-    public void SyncBounds(double widthDips, double heightDips, double scale)
+    public void SyncBounds(double widthDips, double heightDips, double marginDips, double scale)
     {
         var origin = default(POINT);
         if (!ClientToScreen(_owner.WindowHandle, ref origin))
@@ -101,6 +120,7 @@ public sealed partial class VerticalTabsOverlayWindow : Window
             return;
         }
 
+        var margin = (int)Math.Round(marginDips * scale);
         var width = (int)Math.Round(widthDips * scale);
         var height = (int)Math.Round(heightDips * scale);
 
@@ -109,7 +129,7 @@ public sealed partial class VerticalTabsOverlayWindow : Window
             return;
         }
 
-        AppWindow.MoveAndResize(new RectInt32(origin.X, origin.Y, width, height));
+        AppWindow.MoveAndResize(new RectInt32(origin.X + margin, origin.Y + margin, width, height));
     }
 
     /// <summary>
@@ -131,15 +151,102 @@ public sealed partial class VerticalTabsOverlayWindow : Window
     /// </summary>
     public void ShowOverlay(bool activate)
     {
+        var wasVisible = AppWindow.IsVisible;
+
         AppWindow.Show(activate);
 
         if (activate)
         {
             Activate();
         }
+
+        // Only on an actual hidden-to-shown transition: ShowOverlay also runs on every resize
+        // and theme change while the pane is already open (see MainWindow.UpdateVerticalTabsOverlay),
+        // and replaying the reveal on each of those would read as a flicker, not a reveal.
+        if (!wasVisible)
+        {
+            AnimateIn();
+        }
     }
 
-    public void HideOverlay() => AppWindow.Hide();
+    /// <summary>Animates out first; only actually hides the window once that finishes.</summary>
+    public void HideOverlay()
+    {
+        if (!AppWindow.IsVisible)
+        {
+            return;
+        }
+
+        AnimateOut(AppWindow.Hide);
+    }
+
+    // ----------------------------------------------------------------------- reveal animation
+    //
+    // A fade plus a small horizontal slide, replacing what used to be an instant AppWindow.Show()/
+    // Hide() snap. Driven directly off the Composition Visual rather than a Storyboard: this is a
+    // Window, and the same x:Bind restriction that keeps Converter= out of this file's XAML (see
+    // the class-level comment) makes a XAML-resource-driven Storyboard just as awkward here, so
+    // building the animation in code sidesteps that rather than working around it.
+
+    private const int RevealAnimationMs = 200;
+
+    private void AnimateIn()
+    {
+        var visual = ElementCompositionPreview.GetElementVisual(OverlayRoot);
+        var compositor = visual.Compositor;
+        var duration = TimeSpan.FromMilliseconds(RevealAnimationMs);
+        var easeOut = compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1f));
+
+        // Set synchronously before the animation starts, so the window's first shown frame is
+        // already mid-transition rather than a flash of the fully-revealed state.
+        visual.Opacity = 0f;
+        visual.Offset = new Vector3(-16f, 0f, 0f);
+
+        var opacity = compositor.CreateScalarKeyFrameAnimation();
+        opacity.Duration = duration;
+        opacity.InsertKeyFrame(1f, 1f, easeOut);
+
+        var offset = compositor.CreateVector3KeyFrameAnimation();
+        offset.Duration = duration;
+        offset.InsertKeyFrame(1f, Vector3.Zero, easeOut);
+
+        visual.StartAnimation(nameof(Visual.Opacity), opacity);
+        visual.StartAnimation(nameof(Visual.Offset), offset);
+    }
+
+    private void AnimateOut(Action onHidden)
+    {
+        var visual = ElementCompositionPreview.GetElementVisual(OverlayRoot);
+        var compositor = visual.Compositor;
+        var duration = TimeSpan.FromMilliseconds(RevealAnimationMs);
+        var easeIn = compositor.CreateCubicBezierEasingFunction(new Vector2(0.4f, 0f), new Vector2(1f, 1f));
+
+        var opacity = compositor.CreateScalarKeyFrameAnimation();
+        opacity.Duration = duration;
+        opacity.InsertKeyFrame(1f, 0f, easeIn);
+
+        var offset = compositor.CreateVector3KeyFrameAnimation();
+        offset.Duration = duration;
+        offset.InsertKeyFrame(1f, new Vector3(-16f, 0f, 0f), easeIn);
+
+        // A scoped batch is what makes "hide the actual window" waitable: these two
+        // StartAnimation calls are fire-and-forget on their own, with no other way to learn when
+        // they finish.
+        var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+        batch.Completed += (_, _) =>
+        {
+            onHidden();
+
+            // Restored for the next AnimateIn, which sets both again anyway - cheap insurance
+            // against some future caller that shows this window without going through ShowOverlay.
+            visual.Opacity = 1f;
+            visual.Offset = Vector3.Zero;
+        };
+
+        visual.StartAnimation(nameof(Visual.Opacity), opacity);
+        visual.StartAnimation(nameof(Visual.Offset), offset);
+        batch.End();
+    }
 
     /// <summary>Moves focus into the address bar, opening the pane first if it is not up yet.</summary>
     public void FocusAddressBar()
@@ -255,6 +362,15 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         public int Y;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MARGINS
+    {
+        public int Left;
+        public int Right;
+        public int Top;
+        public int Bottom;
+    }
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ClientToScreen(nint hWnd, ref POINT point);
@@ -269,4 +385,7 @@ public sealed partial class VerticalTabsOverlayWindow : Window
     // overload marshals it as one instead of reusing the int one and casting the sentinel.
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref uint value, int size);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmExtendFrameIntoClientArea(nint hwnd, ref MARGINS margins);
 }

@@ -42,11 +42,16 @@
     compile (microsoft-ui-xaml#5902, #6369). The view model exposes pre-converted Visibility
     properties for exactly this reason.
   -->
+  <!--
+    BorderThickness is on all four sides, not just the trailing edge: SyncBounds insets this
+    whole window from the owner's top/left/bottom by VerticalTabsPaneMargin now, so every edge is
+    a real edge floating over the page rather than flush against the owner window's own frame.
+  -->
   <Grid
     x:Name="OverlayRoot"
     Background="{ThemeResource WinserChromeBrush}"
     BorderBrush="{ThemeResource WinserChromeBorderBrush}"
-    BorderThickness="0,0,1,0"
+    BorderThickness="1"
     PointerEntered="OnPointerEnteredOverlay"
     PointerExited="OnPointerExitedOverlay">
     <Grid.RowDefinitions>
@@ -194,7 +199,7 @@
       Padding="6,0,6,6"
       AllowDrop="True"
       CanReorderItems="True"
-      ItemContainerStyle="{StaticResource SidebarListItemStyle}"
+      ItemContainerStyle="{StaticResource VerticalTabItemStyle}"
       ItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
       SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=OneWay}"
       SelectionChanged="OnVerticalTabSelectionChanged"

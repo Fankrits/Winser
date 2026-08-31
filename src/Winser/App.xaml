@@ -102,6 +102,49 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       </Style>
 
+      <!--
+        The vertical tab list only: a soft translucent pill for the selected row instead of
+        ListViewItem's default accent-colored left bar. Scoped to its own style rather than added
+        to SidebarListItemStyle above, which winser://settings also uses and which keeps the
+        default accent-bar look there.
+
+        The override resources are nested ThemeDictionaries, not plain entries bound through
+        StaticResource to a shared brush: StaticResource resolves once at parse time and would
+        freeze the pill to whichever theme happened to be active then, where ThemeResource (what
+        ListViewItem's own template uses internally to read these same keys) re-resolves on every
+        theme change - so the override has to be theme-dictionary-shaped too, or it stops
+        tracking light/dark after the first switch.
+      -->
+      <Style x:Key="VerticalTabItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SidebarListItemStyle}">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Resources">
+          <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+              <ResourceDictionary x:Key="Light">
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#FFFFFF" Opacity="0.85" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#FFFFFF" Opacity="0.95" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#FFFFFF" Opacity="0.95" />
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPressedBrush" Color="Transparent" />
+              </ResourceDictionary>
+              <ResourceDictionary x:Key="Dark">
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#FFFFFF" Opacity="0.2" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#FFFFFF" Opacity="0.28" />
+                <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#FFFFFF" Opacity="0.28" />
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="Transparent" />
+                <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPressedBrush" Color="Transparent" />
+              </ResourceDictionary>
+              <!--  No HighContrast entry on purpose: ThemeResource keeps walking outward to the
+                    framework's own defaults for a theme this dictionary doesn't cover, which
+                    already satisfy high-contrast's own contrast rules - a translucent pill with
+                    no guaranteed contrast against its background would not.  -->
+            </ResourceDictionary.ThemeDictionaries>
+          </ResourceDictionary>
+        </Setter>
+      </Style>
+
     </ResourceDictionary>
   </Application.Resources>
 
