@@ -24,13 +24,22 @@
                 window's Mica, and the pane is a Popup with no backdrop of its own - so the same
                 brush there just reads as heavy and opaque. Acrylic blurs what is behind it, which
                 is what makes a translucent panel legible over a busy page instead of muddy.
+
+                TintLuminosityOpacity is set rather than left to WinUI's own derivation, which is
+                deliberately conservative - it biases opaque to guarantee legibility on any
+                backdrop, and that is exactly what made this read heavy. It, and TintOpacity, are
+                the two knobs to turn if the pane wants to be glassier or more solid.
+
                 FallbackColor is what shows if the material is unavailable (transparency effects
-                off, low battery), so it is set to a solid that still looks intentional.  -->
+                off, battery saver, remote session), so it is a solid that still looks
+                intentional - and if the pane looks flat despite all this, that fallback rendering
+                is the first thing to suspect.  -->
           <AcrylicBrush
             x:Key="WinserPaneBrush"
             FallbackColor="#F5F5F5"
             TintColor="#FFFFFF"
-            TintOpacity="0.3" />
+            TintLuminosityOpacity="0.8"
+            TintOpacity="0.2" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -42,7 +51,8 @@
             x:Key="WinserPaneBrush"
             FallbackColor="#242424"
             TintColor="#1C1C1C"
-            TintOpacity="0.3" />
+            TintLuminosityOpacity="0.5"
+            TintOpacity="0.2" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
