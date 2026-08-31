@@ -372,7 +372,12 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         var overlay = EnsureOverlay();
         overlay.ApplyTheme(RootGrid.RequestedTheme);
-        overlay.SyncBounds(VerticalTabsExpandedWidth, RootGrid.ActualHeight, RasterizationScale);
+
+        // Clamped to the owner's own width, not just the constant: on a narrow or snapped window
+        // (or a small-screen device) a fixed 240px pane would otherwise hang off the right edge
+        // of the window itself rather than shrinking to fit it.
+        var width = Math.Min(VerticalTabsExpandedWidth, RootGrid.ActualWidth);
+        overlay.SyncBounds(width, RootGrid.ActualHeight, RasterizationScale);
         overlay.ShowOverlay(activate);
     }
 

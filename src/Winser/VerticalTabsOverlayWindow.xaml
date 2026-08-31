@@ -8,6 +8,19 @@
   mc:Ignorable="d">
 
   <!--
+    Real Acrylic, not a flat tint: this window previously had no SystemBackdrop at all, so
+    OverlayRoot's semi-transparent WinserChromeBrush had nothing underneath it to blur - unlike
+    MainWindow's own chrome, which sits over that window's MicaBackdrop. DesktopAcrylicBackdrop
+    blurs whatever is on screen behind this window (the page, other windows, the desktop) at the
+    DWM compositor level, which is a different layer than the child-HWND "airspace" problem
+    described below - blur-behind composites beneath this window's own surface regardless of
+    what produced the pixels there, so it is not affected by WebView2's painting order.
+  -->
+  <Window.SystemBackdrop>
+    <DesktopAcrylicBackdrop />
+  </Window.SystemBackdrop>
+
+  <!--
     The expanded vertical tabs pane, hosted in its own top-level window rather than inline in
     MainWindow.
 

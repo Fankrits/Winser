@@ -22,6 +22,9 @@ public sealed partial class VerticalTabsOverlayWindow : Window
 {
     private const int GWLP_HWNDPARENT = -8;
 
+    private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    private const int DWMWCP_ROUNDSMALL = 3;
+
     private readonly MainWindow _owner;
 
     public VerticalTabsOverlayWindow(MainWindow owner, BrowserViewModel viewModel)
@@ -50,6 +53,15 @@ public sealed partial class VerticalTabsOverlayWindow : Window
         // is destroyed with it. A one-shot MoveInZOrderAboveWindow would come undone the first time
         // anything else reordered the two.
         SetWindowLongPtrW(WindowHandle, GWLP_HWNDPARENT, owner.WindowHandle);
+
+        // Rounds all four corners at the DWM compositor level - the same mechanism Windows 11
+        // uses for its own flyouts and context menus, and ROUNDSMALL is Microsoft's own guidance
+        // for exactly that class of window (DWMWA_WINDOW_CORNER_PREFERENCE docs: "flyouts or
+        // context menus"). This call simply fails on Windows 10, where the attribute does not
+        // exist - harmless, since the result is never checked, and there is nothing to fall back
+        // to that would not need its own separate XAML-side clipping.
+        var cornerPreference = DWMWCP_ROUNDSMALL;
+        DwmSetWindowAttribute(WindowHandle, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerPreference, sizeof(int));
 
         AppWindow.Hide();
     }
@@ -235,4 +247,7 @@ public sealed partial class VerticalTabsOverlayWindow : Window
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern nint SetWindowLongPtrW(nint hWnd, int index, nint value);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }
