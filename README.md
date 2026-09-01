@@ -337,32 +337,51 @@ and everything persisted is a plain JSON file written by a debounced atomic repl
 
 ### Measured
 
-Real numbers, not estimates: 10 tabs opened on a fresh profile, `Get-Process msedgewebview2 |
-Measure-Object WorkingSet64 -Sum` sampled at each stage, discard threshold temporarily set to
-1 minute so the run finishes in CI time rather than the real 30-minute default.
+Real numbers, not estimates: 10 tabs opened on a fresh profile, sampled at each stage, discard
+threshold temporarily set to 1 minute so the run finishes in CI time rather than the real
+30-minute default. Measured by driving a real, unattended Winser instance on a GitHub Actions
+`windows-latest` runner via `.github/workflows/diagnose.yml`, which also screenshots Mica, the
+find bar, zoom and full screen, and prints `diagnostics.log` to the job summary.
 
-| Checkpoint | MB | msedgewebview2 processes |
-|---|---:|---:|
-| 10 tabs open | 484.7 | 15 |
-| Background nine frozen | 453.3 | 15 |
-| Background nine discarded | 193.9 | 6 |
-| Returned to a discarded tab | 261.4 | 7 |
+| Checkpoint | WebView2 MB | msedgewebview2 processes | Winser MB |
+|---|---:|---:|---:|
+| 10 tabs open | 473.5 | 14 | 174.4 |
+| Background nine frozen | 460.5 | 13 | 176.6 |
+| Background nine discarded | 239.5 | 6 | 101.1 |
+| Returned to a discarded tab | 240.5 | 7 | 101.9 |
 
-Discard closed exactly the nine processes it should have and cut memory by 57%. Freeze's ~6%
-is a smaller number than the feature is capable of by construction: all ten tabs loaded the
-same static, script-light page, which has little to suspend - a real page doing continuous
-work (a timer, a video, a live feed) has more to give back. Returning to a discarded tab costs
-one fresh renderer process, matching the documented "reload, not resume" behavior above.
+| Measure | Value |
+|---|---:|
+| First window after launch | 1143 ms |
+| CPU seconds over a 60s idle window | 0.188 |
 
-Measured by driving a real, unattended Winser instance on a GitHub Actions `windows-latest`
-runner via `.github/workflows/diagnose.yml`, which also screenshots Mica, the find bar, zoom,
-and full screen, and prints `diagnostics.log` to the job summary - useful again the next time
-a change in this area needs the same kind of answer.
+Discard closed the renderers it should have - fourteen processes down to six - and cut
+Chromium's resident memory in half. Freeze's ~3% is a smaller number than the feature is
+capable of by construction: all ten tabs loaded the same static, script-light page, which has
+little to suspend; a real page doing continuous work has more to give back. Returning to a
+discarded tab costs one fresh renderer process, matching the "reload, not resume" behavior
+described above.
 
-Note what this table does and does not cover. It measures *resident memory* across the freeze
-and discard transitions, which is what it was built for. It says nothing about the idle CPU and
-wake-up behaviour the deadline sweep, EcoQoS and the throttling flag above exist to improve -
-that is a different number, sampled separately in the same workflow.
+The Winser column is new, and it is the surprise in this table: **the shell's own working set
+tracks the renderers almost proportionally**, 174.4 MB down to 101.1 MB across the same
+discard. A tab's cost is not only the Chromium process it owns - it is also the WebView2
+element, its composition surfaces and the chrome built around it inside Winser, and all of
+that is handed back too. That column did not exist before; every earlier measurement here
+summed `msedgewebview2` alone, which made the entire XAML side of the app invisible to the one
+tool measuring it.
+
+**What these numbers are not.** The two figures in the second table are a *baseline*, not a
+comparison: startup timing and idle CPU sampling did not exist in this harness before, so
+there is no earlier run to hold them against, and nothing here should be read as "this much
+faster than before". They are recorded so the next change in this area has something to be
+measured against. The memory table can be compared loosely to the runs that produced this
+section's earlier figures, but only loosely - a great deal of the browser changed between
+them, and a shared CI runner is a noisy place to measure a megabyte.
+
+0.188 CPU-seconds over a 60-second wall-clock window, summed across Winser and all six
+remaining renderer processes, is about 0.3% of one core with nine tabs discarded and one
+static page showing. That is the state the deadline sweep, the cursor-poll backoff and the
+throttling flag all exist to keep cheap.
 
 ## Security
 
