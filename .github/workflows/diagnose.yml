@@ -222,6 +222,26 @@ jobs:
           Save-Shot "06-returned-to-discarded-tab"
           $results.AfterReturn = Measure-Footprint
 
+          # The log dump goes first and the results last, deliberately: this job exists to
+          # produce those numbers, and printed before a few hundred lines of layout tracing they
+          # were the one thing a tail of the run never showed.
+          #
+          # DiagnosticLog.Write is an immediate, unbuffered append (File.AppendAllText per
+          # call - see Services/DiagnosticLog.cs), so this is current as of the moment it's
+          # read, no flush-timing race to worry about.
+          $logPath = Join-Path $env:LOCALAPPDATA 'Winser\Data\diagnostics.log'
+          if (Test-Path $logPath) {
+              Write-Host "`n=== diagnostics.log ==="
+              Get-Content $logPath | Write-Host
+              "## diagnostics.log" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              Get-Content $logPath | Out-File -Append $env:GITHUB_STEP_SUMMARY
+              "``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          } else {
+              Write-Warning "No diagnostics.log found at $logPath"
+          }
+
           $summary = @()
           $summary += "## Empirical check results"
           $summary += ""
@@ -239,22 +259,6 @@ jobs:
           $summary += "Screenshots are attached as the diagnostics-screenshots artifact."
           $summary | Out-File -Append $env:GITHUB_STEP_SUMMARY
           $summary | Out-String | Write-Host
-
-          # DiagnosticLog.Write is an immediate, unbuffered append (File.AppendAllText per
-          # call - see Services/DiagnosticLog.cs), so this is current as of the moment it's
-          # read, no flush-timing race to worry about.
-          $logPath = Join-Path $env:LOCALAPPDATA 'Winser\Data\diagnostics.log'
-          if (Test-Path $logPath) {
-              Write-Host "`n=== diagnostics.log ==="
-              Get-Content $logPath | Write-Host
-              "## diagnostics.log" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-              "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-              "``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-              Get-Content $logPath | Out-File -Append $env:GITHUB_STEP_SUMMARY
-              "``````" | Out-File -Append $env:GITHUB_STEP_SUMMARY
-          } else {
-              Write-Warning "No diagnostics.log found at $logPath"
-          }
 
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           Stop-Process -Name msedgewebview2 -Force -ErrorAction SilentlyContinue
