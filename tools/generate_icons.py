@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Render the Winser app icon (Assets/Winser.ico + Assets/Winser.png + the
-Assets/Msix/*.png package logos).
+Assets/Msix/*.png package logos): the ring-and-crescent mark alone, on a
+transparent canvas - no plate behind it.
 
 Everything is drawn analytically with signed distance fields and 4x supersampling,
 so the mark stays crisp at every size and the artwork can be regenerated from
@@ -18,9 +19,9 @@ import zlib
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "Winser", "Assets")
 
-# Brand gradient: indigo -> cyan, sampled along the top-left / bottom-right diagonal.
-GRAD_FROM = (99, 102, 241)
-GRAD_TO = (34, 211, 238)
+# Ink colour the mark is drawn in - dark, so it reads on the light surfaces
+# (README, light theme, a light taskbar) most placements actually put it on.
+INK = (10, 10, 10)
 
 # The mark: a ring with a crescent "bite" cut into a disc, centered in a
 # [-1, 1] square, y pointing down. Mirrored in Assets/Web/newtab.html's
@@ -47,66 +48,35 @@ def _crescent_distance(px, py, blob_r, bite_r, bite_dx):
     return max(d_blob, -d_bite)  # SDF subtraction: blob minus bite
 
 
-def _rounded_box_distance(px, py, half, radius):
-    qx = abs(px) - (half - radius)
-    qy = abs(py) - (half - radius)
-    outside = math.hypot(max(qx, 0.0), max(qy, 0.0))
-    inside = min(max(qx, qy), 0.0)
-    return outside + inside - radius
-
-
 def render(size: int) -> bytes:
-    """Return `size` x `size` RGBA pixels, row-major."""
+    """Return `size` x `size` RGBA pixels, row-major, on a transparent canvas."""
     # Small icons need a proportionally chunkier ring to stay readable.
     boost = 1.0 + (0.35 if size <= 20 else 0.18 if size <= 32 else 0.0)
     r_inner = R_OUTER - (R_OUTER - R_INNER) * boost
-    corner = 0.30 if size >= 32 else 0.24
     px_buf = bytearray(size * size * 4)
 
     for y in range(size):
         for x in range(size):
-            acc_r = acc_g = acc_b = acc_a = 0.0
+            acc_a = 0.0
             for sy in range(SS):
                 for sx in range(SS):
                     # Map the subsample to [-1, 1].
                     u = ((x + (sx + 0.5) / SS) / size) * 2.0 - 1.0
                     v = ((y + (sy + 0.5) / SS) / size) * 2.0 - 1.0
 
-                    plate = _rounded_box_distance(u, v, 0.96, corner)
-                    if plate > 0.02:
-                        continue
-                    plate_a = min(1.0, max(0.0, (0.01 - plate) / 0.02))
-
-                    # Diagonal gradient, 0 at top-left corner, 1 at bottom-right.
-                    t = min(1.0, max(0.0, (u + v + 2.0) / 4.0))
-                    r = GRAD_FROM[0] + (GRAD_TO[0] - GRAD_FROM[0]) * t
-                    g = GRAD_FROM[1] + (GRAD_TO[1] - GRAD_FROM[1]) * t
-                    b = GRAD_FROM[2] + (GRAD_TO[2] - GRAD_FROM[2]) * t
-
                     glyph = min(
                         _ring_distance(u, v, R_OUTER, r_inner),
                         _crescent_distance(u, v, R_BLOB, R_BITE, BITE_DX),
                     )
-                    glyph_a = min(1.0, max(0.0, (0.008 - glyph) / 0.016))
-                    if glyph_a > 0.0:
-                        r += (255 - r) * glyph_a
-                        g += (255 - g) * glyph_a
-                        b += (255 - b) * glyph_a
+                    acc_a += min(1.0, max(0.0, (0.008 - glyph) / 0.016))
 
-                    acc_r += r * plate_a
-                    acc_g += g * plate_a
-                    acc_b += b * plate_a
-                    acc_a += plate_a
-
-            n = SS * SS
-            alpha = acc_a / n
-            i = (y * size + x) * 4
+            alpha = acc_a / (SS * SS)
             if alpha <= 0.0:
                 continue
-            # Un-premultiply so the stored colour is correct at partial coverage.
-            px_buf[i + 0] = min(255, int(acc_r / acc_a + 0.5))
-            px_buf[i + 1] = min(255, int(acc_g / acc_a + 0.5))
-            px_buf[i + 2] = min(255, int(acc_b / acc_a + 0.5))
+            i = (y * size + x) * 4
+            px_buf[i + 0] = INK[0]
+            px_buf[i + 1] = INK[1]
+            px_buf[i + 2] = INK[2]
             px_buf[i + 3] = min(255, int(alpha * 255 + 0.5))
     return bytes(px_buf)
 
