@@ -398,6 +398,12 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     /// <summary>Pushes the window's full-screen state into this tab's page. See IWebViewHost.</summary>
     public void SyncFullScreenFlag() => _host?.SyncFullScreenFlag(_shell.IsFullScreen);
 
+    /// <summary>
+    /// Moves keyboard focus to the page itself, e.g. after submitting an address typed from
+    /// outside this tab's own page (the vertical tabs pane's address bar).
+    /// </summary>
+    public void FocusWebContent() => _host?.FocusContent();
+
     /// <summary>Clears site data through this tab's browser, if it has one yet.</summary>
     public async Task<bool> TryClearBrowsingDataAsync()
     {

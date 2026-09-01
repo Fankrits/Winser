@@ -16,8 +16,8 @@ public static class ThemeHelper
     };
 
     /// <summary>
-    /// Applies the theme to a window's content and repaints the system caption buttons so they
-    /// stay legible on top of the Mica backdrop.
+    /// Applies the theme to a window's content and repaints the system caption buttons - hidden
+    /// until hovered, then legible on top of the Mica backdrop - to match.
     /// </summary>
     public static void Apply(FrameworkElement root, AppWindow appWindow, AppTheme theme)
     {
@@ -35,15 +35,18 @@ public static class ThemeHelper
         var bar = appWindow.TitleBar;
         var dark = root.ActualTheme == ElementTheme.Dark;
         var foreground = dark ? Colors.White : Colors.Black;
-        var muted = dark ? Color.FromArgb(255, 155, 155, 155) : Color.FromArgb(255, 105, 105, 105);
         var hover = dark ? Color.FromArgb(28, 255, 255, 255) : Color.FromArgb(20, 0, 0, 0);
         var pressed = dark ? Color.FromArgb(45, 255, 255, 255) : Color.FromArgb(36, 0, 0, 0);
 
         bar.BackgroundColor = Colors.Transparent;
         bar.ButtonBackgroundColor = Colors.Transparent;
         bar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        bar.ButtonForegroundColor = foreground;
-        bar.ButtonInactiveForegroundColor = muted;
+        // Transparent at rest - glyph included, not just background - so minimize/maximize/close
+        // draw nothing until hovered. Windows still tracks the pointer over their hit-test area
+        // regardless of this: that area lives in the non-client region, entirely outside the
+        // XAML visual tree, so hover/press repainting keeps working with no code-behind needed.
+        bar.ButtonForegroundColor = Colors.Transparent;
+        bar.ButtonInactiveForegroundColor = Colors.Transparent;
         bar.ButtonHoverBackgroundColor = hover;
         bar.ButtonHoverForegroundColor = foreground;
         bar.ButtonPressedBackgroundColor = pressed;

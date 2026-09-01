@@ -26,6 +26,15 @@ public sealed partial class SettingsView : UserControl
         set => SetValue(TabProperty, value);
     }
 
+    private void OnSectionSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if ((sender as ListView)?.SelectedItem is SettingsSectionItem item)
+        {
+            ViewModel.SelectedSection = item.Section;
+            ContentScroller.ChangeView(null, 0, null, true);
+        }
+    }
+
     private void OnForgetPermission(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is SitePermission permission)

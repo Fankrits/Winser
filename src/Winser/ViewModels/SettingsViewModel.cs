@@ -16,6 +16,42 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsService _service = AppServices.Settings;
 
+    /// <summary>Which sidebar category the page is currently showing.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAppearanceSection), nameof(IsStartupSection), nameof(IsSearchSection))]
+    [NotifyPropertyChangedFor(nameof(IsPrivacySection), nameof(IsDownloadsSection), nameof(IsContentSection))]
+    [NotifyPropertyChangedFor(nameof(IsPermissionsSection), nameof(IsAboutSection))]
+    public partial SettingsSection SelectedSection { get; set; }
+
+    public bool IsAppearanceSection => SelectedSection == SettingsSection.Appearance;
+
+    public bool IsStartupSection => SelectedSection == SettingsSection.Startup;
+
+    public bool IsSearchSection => SelectedSection == SettingsSection.Search;
+
+    public bool IsPrivacySection => SelectedSection == SettingsSection.Privacy;
+
+    public bool IsDownloadsSection => SelectedSection == SettingsSection.Downloads;
+
+    public bool IsContentSection => SelectedSection == SettingsSection.SitesAndContent;
+
+    public bool IsPermissionsSection => SelectedSection == SettingsSection.Permissions;
+
+    public bool IsAboutSection => SelectedSection == SettingsSection.About;
+
+    /// <summary>The sidebar's entries, in the order they are listed.</summary>
+    public IReadOnlyList<SettingsSectionItem> Sections { get; } =
+    [
+        new(SettingsSection.Appearance, "Appearance", Glyphs.Color),
+        new(SettingsSection.Startup, "On startup", Glyphs.Home),
+        new(SettingsSection.Search, "Search", Glyphs.Search),
+        new(SettingsSection.Privacy, "Privacy", Glyphs.Shield),
+        new(SettingsSection.Downloads, "Downloads", Glyphs.Download),
+        new(SettingsSection.SitesAndContent, "Sites and content", Glyphs.Globe),
+        new(SettingsSection.Permissions, "Site permissions", Glyphs.Lock),
+        new(SettingsSection.About, "About Winser", Glyphs.Info),
+    ];
+
     public IReadOnlyList<string> ThemeOptions { get; } =
         ["Use system setting", "Light", "Dark"];
 
@@ -78,6 +114,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         get => Values.ShowBookmarksBar;
         set => Set(value, Values.ShowBookmarksBar, v => Values.ShowBookmarksBar = v);
+    }
+
+    public bool UseVerticalTabs
+    {
+        get => Values.UseVerticalTabs;
+        set => Set(value, Values.UseVerticalTabs, v => Values.UseVerticalTabs = v);
     }
 
     public bool OpenPopupsAsTabs

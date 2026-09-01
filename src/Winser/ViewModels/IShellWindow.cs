@@ -14,6 +14,13 @@ public interface IShellWindow
 
     void SetFullScreen(bool fullScreen);
 
+    /// <summary>
+    /// Re-derives the vertical tab pane's chrome (width, drag region, whether the native
+    /// horizontal strip is hidden) from the view model's current state. Cheap and idempotent,
+    /// so callers never need to know which of several vertical-tabs properties actually changed.
+    /// </summary>
+    void RefreshTabChrome();
+
     void FocusAddressBar();
 
     void CloseWindow();

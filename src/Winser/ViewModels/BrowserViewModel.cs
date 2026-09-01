@@ -47,11 +47,41 @@ public sealed partial class BrowserViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FullScreenGlyph), nameof(FullScreenTooltip))]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsFullScreen { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsBookmarksBarVisible))]
     public partial bool ShowBookmarksBar { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
+    public partial bool UseVerticalTabs { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(PinGlyph), nameof(PinTooltip))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
+    public partial bool IsVerticalTabsPinned { get; set; }
+
+    /// <summary>True while the pointer is over the collapsed vertical tabs hover-zone, expanding the pane as a peek.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
+    public partial bool IsVerticalTabsPointerOver { get; set; }
+
+    /// <summary>
+    /// True while the vertical pane's own address bar has focus. Folded into
+    /// <see cref="IsVerticalTabsExpanded"/> so the pane stays open across a hover ending
+    /// mid-edit, and so Ctrl+L can reach an address bar that starts out fully collapsed:
+    /// focusing it needs it visible first, and hovering is not itself a keyboard-reachable action.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
+    public partial bool IsVerticalTabsAddressBarFocused { get; set; }
 
     [ObservableProperty]
     public partial bool HasActiveDownloads { get; set; }
@@ -60,6 +90,8 @@ public sealed partial class BrowserViewModel : ObservableObject
     {
         IsPrivate = isPrivate;
         ShowBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar && !isPrivate;
+        UseVerticalTabs = AppServices.Settings.Current.UseVerticalTabs;
+        IsVerticalTabsPinned = AppServices.Settings.Current.VerticalTabsPinned;
 
         AppServices.Bookmarks.Items.CollectionChanged += OnBookmarksChanged;
         AppServices.Downloads.Items.CollectionChanged += OnDownloadsChanged;
@@ -95,9 +127,43 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// <summary>Full screen hides all chrome, the bookmarks bar included.</summary>
     public bool IsBookmarksBarVisible => ShowBookmarksBar && !IsFullScreen;
 
+    /// <summary>Full screen hides all chrome, the vertical tab pane included.</summary>
+    public bool IsVerticalTabsPaneVisible => UseVerticalTabs && !IsFullScreen;
+
+    /// <summary>
+    /// The per-tab toolbar (nav buttons, address bar, zoom/mute/bookmark/downloads/menu) is
+    /// redundant with the vertical pane's own nav row and address bar, so it hides the same way
+    /// full screen already hides it.
+    /// </summary>
+    public bool IsToolbarVisible => !IsFullScreen && !UseVerticalTabs;
+
+    /// <summary>Pinned open, actively being peeked at via hover, or its address bar has focus.</summary>
+    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver || IsVerticalTabsAddressBarFocused;
+
+    /// <summary>
+    /// Whether the pane's actual chrome - background, header, nav row, address bar, tab list -
+    /// should be on screen. Bound straight to the floating pane's Popup.IsOpen (see
+    /// MainWindow.xaml). Collapsed, vertical tabs shows nothing, not even an icon rail; all that
+    /// is left in the window itself is a transparent strip down the left edge, there purely to
+    /// notice the pointer arriving.
+    /// </summary>
+    public bool IsVerticalTabsPaneExpanded => IsVerticalTabsPaneVisible && IsVerticalTabsExpanded;
+
+    // x:Bind cannot use a Converter anywhere in a Window's own binding scope: the compiler emits
+    // a call to SetConverterLookupRoot(this), and Window - unlike Page or UserControl - is not a
+    // FrameworkElement, so that call fails to compile (microsoft-ui-xaml#5902, #6369). Exposing
+    // the already-converted Visibility here is the documented workaround.
+    public Visibility VerticalTabsPaneVisibility => IsVerticalTabsPaneVisible ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VerticalTabsExpandedVisibility => IsVerticalTabsExpanded ? Visibility.Visible : Visibility.Collapsed;
+
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
     public string FullScreenTooltip => IsFullScreen ? "Exit full screen (F11)" : "Full screen (F11)";
+
+    public string PinGlyph => IsVerticalTabsPinned ? Glyphs.Unpin : Glyphs.Pin;
+
+    public string PinTooltip => IsVerticalTabsPinned ? "Unpin the tab pane" : "Keep the tab pane open";
 
     public void AttachWindow(IShellWindow window) => _window = window;
 
@@ -121,6 +187,20 @@ public sealed partial class BrowserViewModel : ObservableObject
             tab.SyncFullScreenFlag();
         }
     }
+
+    // All four drive the window's pixel-level layout (the hover strip's width, the drag region,
+    // whether the native strip is hidden, and the floating pane's own size and offset), which
+    // lives on the window rather than here. Routing every write through RefreshTabChrome - rather
+    // than only the ones a window event handler starts - covers UseVerticalTabs flipping from
+    // winser://settings, in a different tab entirely, and IsVerticalTabsAddressBarFocused being
+    // set by Ctrl+L before any pointer is involved.
+    partial void OnUseVerticalTabsChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsPinnedChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsPointerOverChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsAddressBarFocusedChanged(bool value) => _window?.RefreshTabChrome();
 
     /// <summary>The owning window's HWND, for WinRT pickers that need an owner.</summary>
     public nint WindowHandle => _window?.WindowHandle ?? IntPtr.Zero;
@@ -567,6 +647,18 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Whether the vertical pane stays expanded is not privacy-sensitive the way the bookmarks
+    /// bar is, so unlike <see cref="ToggleBookmarksBar"/> this persists for InPrivate windows too.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleVerticalTabsPinned()
+    {
+        IsVerticalTabsPinned = !IsVerticalTabsPinned;
+        AppServices.Settings.Current.VerticalTabsPinned = IsVerticalTabsPinned;
+        AppServices.Settings.Commit();
+    }
+
     [RelayCommand]
     private void ToggleFullScreen() => _window?.SetFullScreen(!IsFullScreen);
 
@@ -615,6 +707,8 @@ public sealed partial class BrowserViewModel : ObservableObject
         {
             ShowBookmarksBar = AppServices.Settings.Current.ShowBookmarksBar;
         }
+
+        UseVerticalTabs = AppServices.Settings.Current.UseVerticalTabs;
 
         foreach (var tab in Tabs)
         {

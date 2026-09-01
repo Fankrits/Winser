@@ -23,7 +23,23 @@
     <MicaBackdrop />
   </Window.SystemBackdrop>
 
-  <!-- Transparent, not unset: lets Mica show through while keeping the whole window hit-testable. -->
+  <!--
+    Transparent, not unset: lets Mica show through while keeping the whole window hit-testable.
+
+    One cell, no columns and no rows: the page fills the window edge to edge in both modes. An
+    earlier vertical-tabs layout reserved a left column - first tracking the pane's full width so
+    the page shifted aside when it opened, later just the hover-zone width - and either way that
+    column was visible as a band of window background down the left of every page. Nothing
+    reserves space for vertical tabs now: the expanded pane is a windowed Popup that floats over
+    the page, and the hover trigger is the cursor's own position rather than an element needing
+    room to sit in (see MainWindow.xaml.cs).
+
+    TabStrip deliberately has no Grid.Row either - it must stay anchored at y=0 in both modes,
+    since that is what lets a negative top margin (see MainWindow.xaml.cs, UpdateChromeLayout)
+    push the native strip fully off-screen above the window rather than just far enough to clear a
+    reserved row; the vertical mode drag region is a same-origin overlay, not a second row, for
+    the same y=0 reason - see its own comment below.
+  -->
   <Grid x:Name="RootGrid" Background="Transparent">
 
     <!--
@@ -120,6 +136,296 @@
         </DataTemplate>
       </TabView.TabItemTemplate>
     </TabView>
+
+    <!--
+      Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
+      clearance, since TabStrip's own footer is inside its (now hidden) native strip.
+
+      An overlay (Top-aligned, Height set from code to match TabStripHeight), not a reserved
+      Grid row: TabStrip has to keep its cell anchored at y=0 for the strip-hiding trick below
+      to work at all, so there is no row left over here to occupy - "content starts at y=40"
+      and "the native strip is fully off-screen above y=0" are not simultaneously satisfiable
+      once TabStrip's own cell has been pushed down to y=40 by a reserved row, because the
+      strip and the content it hides above are one contiguous block inside TabView's template.
+      Overlaying instead of reserving space means this bar tints whatever content is directly
+      under it rather than displacing it - the same trade Windows 11 itself makes when content
+      scrolls under an extended, Mica-tinted title bar.
+    -->
+    <Grid
+      x:Name="VerticalModeDragRegion"
+      VerticalAlignment="Top"
+      Background="{ThemeResource WinserChromeBrush}"
+      Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
+
+    <!--
+      Vertical tabs mode's stand-in for the whole native strip.
+
+      There is deliberately no hover strip element here any more, and RootGrid has no columns: the
+      page fills the window edge to edge, with nothing reserving a band down the left for the
+      pointer to land on. A strip would have had to stay clear of WebView2 to receive
+      PointerEntered at all, and that reserved band was visible as a sliver of window background
+      beside every page. So the hover trigger is the cursor's own position instead, polled in
+      MainWindow.xaml.cs - which no element can swallow, needs no screen space, and leaves the
+      leftmost pixels of the page clickable rather than covered by an invisible catcher.
+
+      ShouldConstrainToRootBounds="False" makes this a windowed popup, which gets its own HWND and
+      so renders above WebView2's, escaping the airspace problem that made a plain inline overlay
+      invisible over a live page. Unlike the owned top-level Window this used to be, a Popup has no
+      window frame for DWM to draw a border around - which is what the white outline was, through
+      three failed attempts to suppress it at the window level. Rounded corners and theme are
+      ordinary XAML here rather than DWM attributes and manual propagation.
+
+      Known trade, and the reason this route was passed over the first time: drag-and-drop inside
+      a windowed popup is broken by microsoft-ui-xaml#9276, so reordering tabs by dragging them
+      within the pane may not work. That issue predates the WinAppSDK 2.3 this project builds
+      against; if it still reproduces, reordering is the thing to give up, not the floating.
+    -->
+    <Popup
+      x:Name="VerticalTabsFlyout"
+      ShouldConstrainToRootBounds="False"
+      IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
+      <Border
+        x:Name="VerticalTabsCard"
+        Background="{ThemeResource WinserPaneBrush}"
+        CornerRadius="8"
+        PointerEntered="OnVerticalTabsPanePointerEntered"
+        PointerExited="OnVerticalTabsPanePointerExited">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  App mark, InPrivate badge, and the pin toggle - the pane's own header, matching
+              TabStripHeader/TabStripFooter's job in horizontal mode.  -->
+        <Grid
+          Grid.Row="0"
+          Height="40"
+          Padding="12,0,6,0"
+          ColumnSpacing="8">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Image
+            Width="16"
+            Height="16"
+            Source="ms-appx:///Assets/Winser.png"
+            VerticalAlignment="Center" />
+          <Border
+            x:Name="VerticalPrivateBadge"
+            Grid.Column="1"
+            Padding="8,2"
+            Background="{ThemeResource WinserPrivateAccentBrush}"
+            CornerRadius="10"
+            Visibility="Collapsed"
+            VerticalAlignment="Center">
+            <TextBlock
+              FontSize="11"
+              FontWeight="SemiBold"
+              Foreground="White"
+              Text="InPrivate"
+              Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+          </Border>
+          <Button
+            Grid.Column="3"
+            Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
+            Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
+            Style="{StaticResource ToolbarIconButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
+            Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+        </Grid>
+
+        <!--  Nav buttons and address bar, standing in for BrowserTabPage's own toolbar (hidden
+              while vertical tabs is on, see BrowserViewModel.IsToolbarVisible) - both act on
+              whichever tab is currently selected, so every binding here is explicitly OneWay:
+              SelectedTab changes as the user switches tabs, unlike BrowserTabPage's own ViewModel,
+              which is fixed to one tab for that page's whole lifetime.  -->
+        <Grid
+          Grid.Row="1"
+          Margin="8,4,8,0"
+          ColumnSpacing="2"
+          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Button
+            Grid.Column="0"
+            AutomationProperties.Name="Back"
+            Command="{x:Bind ViewModel.SelectedTab.GoBackCommand, Mode=OneWay}"
+            Content="&#xE72B;"
+            Style="{StaticResource ToolbarIconButtonStyle}"
+            ToolTipService.ToolTip="Back (Alt+Left)" />
+          <Button
+            Grid.Column="1"
+            AutomationProperties.Name="Forward"
+            Command="{x:Bind ViewModel.SelectedTab.GoForwardCommand, Mode=OneWay}"
+            Content="&#xE72A;"
+            Style="{StaticResource ToolbarIconButtonStyle}"
+            ToolTipService.ToolTip="Forward (Alt+Right)" />
+          <Button
+            Grid.Column="2"
+            AutomationProperties.Name="Reload"
+            Command="{x:Bind ViewModel.SelectedTab.ReloadOrStopCommand, Mode=OneWay}"
+            Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
+            Style="{StaticResource ToolbarIconButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
+        </Grid>
+
+        <AutoSuggestBox
+          x:Name="VerticalAddressBox"
+          Grid.Row="2"
+          Height="32"
+          Margin="8,4"
+          CornerRadius="16"
+          ItemsSource="{x:Bind ViewModel.SelectedTab.Suggestions, Mode=OneWay}"
+          PlaceholderText="Search or enter web address"
+          Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
+          TextMemberPath="Text"
+          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}"
+          GotFocus="OnVerticalAddressGotFocus"
+          LostFocus="OnVerticalAddressLostFocus"
+          QuerySubmitted="OnVerticalAddressQuerySubmitted"
+          TextChanged="OnVerticalAddressTextChanged">
+          <AutoSuggestBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:AddressSuggestion">
+              <Grid Padding="0,3" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <FontIcon
+                  FontSize="14"
+                  Glyph="{x:Bind Glyph}"
+                  Opacity="0.65"
+                  VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="{x:Bind Text}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock
+                    Opacity="0.6"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind Description}"
+                    TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </Grid>
+            </DataTemplate>
+          </AutoSuggestBox.ItemTemplate>
+        </AutoSuggestBox>
+
+        <Button
+          Grid.Row="3"
+          Margin="8,2,8,6"
+          HorizontalAlignment="Stretch"
+          HorizontalContentAlignment="Left"
+          Background="Transparent"
+          BorderThickness="0"
+          Command="{x:Bind ViewModel.AddTabCommand}"
+          ToolTipService.ToolTip="New tab (Ctrl+T)">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
+            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+          </StackPanel>
+        </Button>
+
+        <ListView
+          x:Name="VerticalTabList"
+          Grid.Row="4"
+          Padding="6,0,6,6"
+          AllowDrop="True"
+          CanReorderItems="True"
+          ItemContainerStyle="{StaticResource VerticalTabItemStyle}"
+          ItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
+          SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=OneWay}"
+          SelectionChanged="OnVerticalTabSelectionChanged"
+          SelectionMode="Single">
+          <!--
+            A soft translucent pill for the selected row instead of ListViewItem's default
+            accent-colored left bar, scoped to just this list (winser://settings' own sidebar
+            keeps the default look). Set here rather than through VerticalTabItemStyle because
+            Resources is not a DependencyProperty, so a Style Setter cannot target it (WMC0095).
+            Nested ThemeDictionaries rather than a StaticResource alias to a shared brush:
+            StaticResource resolves once at parse time and would freeze the pill to whichever
+            theme was active then, where ThemeResource - what ListViewItem's own template uses
+            to read these keys - re-resolves on every theme change.
+          -->
+          <ListView.Resources>
+            <ResourceDictionary>
+              <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                  <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#FFFFFF" Opacity="0.85" />
+                  <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#FFFFFF" Opacity="0.95" />
+                  <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#FFFFFF" Opacity="0.95" />
+                  <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent" />
+                  <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="Transparent" />
+                  <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPressedBrush" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                  <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#FFFFFF" Opacity="0.2" />
+                  <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#FFFFFF" Opacity="0.28" />
+                  <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPressed" Color="#FFFFFF" Opacity="0.28" />
+                  <SolidColorBrush x:Key="ListViewItemSelectionIndicatorBrush" Color="Transparent" />
+                  <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPointerOverBrush" Color="Transparent" />
+                  <SolidColorBrush x:Key="ListViewItemSelectionIndicatorPressedBrush" Color="Transparent" />
+                </ResourceDictionary>
+                <!--  No HighContrast entry on purpose: ThemeResource keeps walking outward to the
+                      framework's own defaults for a theme this dictionary doesn't cover, which
+                      already satisfy high-contrast's contrast rules - a translucent pill would not.  -->
+              </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+          </ListView.Resources>
+          <ListView.ItemTemplate>
+            <DataTemplate x:DataType="vm:BrowserTabViewModel">
+              <Grid ColumnSpacing="10" ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Grid.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuFlyoutItem Command="{x:Bind DuplicateCommand}" Text="Duplicate tab" />
+                    <MenuFlyoutItem Command="{x:Bind ReloadOrStopCommand}" Text="Reload" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Command="{x:Bind CloseOthersCommand}" Text="Close other tabs" />
+                    <MenuFlyoutItem Command="{x:Bind CloseToTheRightCommand}" Text="Close tabs to the right" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem Command="{x:Bind CloseCommand}" Text="Close tab" />
+                  </MenuFlyout>
+                </Grid.ContextFlyout>
+
+                <IconSourceElement
+                  Width="16"
+                  Height="16"
+                  IconSource="{x:Bind TabIcon, Mode=OneWay}"
+                  VerticalAlignment="Center" />
+                <TextBlock
+                  Grid.Column="1"
+                  Text="{x:Bind Title, Mode=OneWay}"
+                  TextTrimming="CharacterEllipsis"
+                  VerticalAlignment="Center"
+                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+                <Button
+                  Grid.Column="2"
+                  Command="{x:Bind CloseCommand}"
+                  Content="&#xE711;"
+                  Style="{StaticResource ToolbarIconButtonStyle}"
+                  ToolTipService.ToolTip="Close tab"
+                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+              </Grid>
+            </DataTemplate>
+          </ListView.ItemTemplate>
+        </ListView>
+      </Grid>
+      </Border>
+    </Popup>
 
   </Grid>
 </Window>

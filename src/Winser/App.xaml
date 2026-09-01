@@ -19,6 +19,27 @@
           <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="#000000" Opacity="0.09" />
           <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="#FFFFFF" />
           <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="#4F46E5" />
+          <!--  The floating vertical tabs pane. Real acrylic rather than WinserChromeBrush: that
+                one is a flat tint that only works because the chrome it fills sits over the
+                window's Mica, and the pane is a Popup with no backdrop of its own - so the same
+                brush there just reads as heavy and opaque. Acrylic blurs what is behind it, which
+                is what makes a translucent panel legible over a busy page instead of muddy.
+
+                TintLuminosityOpacity is set rather than left to WinUI's own derivation, which is
+                deliberately conservative - it biases opaque to guarantee legibility on any
+                backdrop, and that is exactly what made this read heavy. It, and TintOpacity, are
+                the two knobs to turn if the pane wants to be glassier or more solid.
+
+                FallbackColor is what shows if the material is unavailable (transparency effects
+                off, battery saver, remote session), so it is a solid that still looks
+                intentional - and if the pane looks flat despite all this, that fallback rendering
+                is the first thing to suspect.  -->
+          <AcrylicBrush
+            x:Key="WinserPaneBrush"
+            FallbackColor="#F5F5F5"
+            TintColor="#FFFFFF"
+            TintLuminosityOpacity="0.8"
+            TintOpacity="0.2" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -26,6 +47,12 @@
           <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="#FFFFFF" Opacity="0.09" />
           <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="#202020" />
           <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="#4F46E5" />
+          <AcrylicBrush
+            x:Key="WinserPaneBrush"
+            FallbackColor="#242424"
+            TintColor="#1C1C1C"
+            TintLuminosityOpacity="0.5"
+            TintOpacity="0.2" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="HighContrast">
@@ -33,6 +60,8 @@
           <SolidColorBrush x:Key="WinserChromeBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
           <SolidColorBrush x:Key="WinserContentBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
           <SolidColorBrush x:Key="WinserPrivateAccentBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+          <!--  Solid, not acrylic: high contrast has no use for a translucent panel.  -->
+          <SolidColorBrush x:Key="WinserPaneBrush" Color="{ThemeResource SystemColorWindowColor}" />
         </ResourceDictionary>
 
       </ResourceDictionary.ThemeDictionaries>
@@ -94,8 +123,23 @@
         <Setter Property="Margin" Value="0,0,0,4" />
       </Style>
 
-      <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
-        <Setter Property="Margin" Value="0,24,0,8" />
+      <!--  A row in a left-side ListView: the winser://settings sidebar, the vertical tab list.  -->
+      <Style x:Key="SidebarListItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource DefaultListViewItemStyle}">
+        <Setter Property="Margin" Value="0,1" />
+        <Setter Property="Padding" Value="12,9" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      </Style>
+
+      <!--
+        The vertical tab list only: a larger corner radius than the shared SidebarListItemStyle
+        (which winser://settings' own sidebar also uses and keeps its current radius). The
+        matching selected-row pill lives on VerticalTabList.Resources in MainWindow.xaml rather
+        than here as a second Setter - Resources is not a DependencyProperty, so a Style Setter
+        cannot target it at all (WMC0095), only property-element syntax on the element itself.
+      -->
+      <Style x:Key="VerticalTabItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SidebarListItemStyle}">
+        <Setter Property="CornerRadius" Value="8" />
       </Style>
 
     </ResourceDictionary>
