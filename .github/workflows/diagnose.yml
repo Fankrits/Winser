@@ -67,13 +67,30 @@ jobs:
           Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class Win32 { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int dwProcessId); }'
           $shots = New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\diagnostics"
 
-          function Measure-WebView2 {
-              $procs = Get-Process msedgewebview2 -ErrorAction SilentlyContinue
-              if (-not $procs) { return [pscustomobject]@{ MB = 0; Count = 0 } }
+          # Winser's own working set is measured alongside the renderers', because the two move
+          # for different reasons and only one of them was ever visible here. Chromium's is what
+          # freeze and discard act on; Winser's is what the XAML shell costs, which is what any
+          # change to how much chrome is built per tab actually moves. Reporting only the first
+          # made the second unfalsifiable.
+          function Measure-Footprint {
+              $web   = @(Get-Process msedgewebview2 -ErrorAction SilentlyContinue)
+              $shell = @(Get-Process Winser -ErrorAction SilentlyContinue)
               [pscustomobject]@{
-                  MB    = [math]::Round((($procs | Measure-Object WorkingSet64 -Sum).Sum) / 1MB, 1)
-                  Count = $procs.Count
+                  MB      = if ($web)   { [math]::Round((($web   | Measure-Object WorkingSet64 -Sum).Sum) / 1MB, 1) } else { 0 }
+                  Count   = $web.Count
+                  ShellMB = if ($shell) { [math]::Round((($shell | Measure-Object WorkingSet64 -Sum).Sum) / 1MB, 1) } else { 0 }
               }
+          }
+
+          # Total CPU time consumed, summed across the shell and every renderer. Sampled as a
+          # difference over a fixed wall-clock window rather than as an instantaneous
+          # percentage, which on a shared runner is mostly noise.
+          function Measure-CpuSeconds {
+              $total = 0.0
+              foreach ($p in @(Get-Process Winser, msedgewebview2 -ErrorAction SilentlyContinue)) {
+                  try { $total += $p.TotalProcessorTime.TotalSeconds } catch { }
+              }
+              [math]::Round($total, 3)
           }
 
           function Send-Key($keys) {
@@ -106,13 +123,36 @@ jobs:
           $results = [ordered]@{}
 
           Write-Host "Launching Winser..."
+          $launch = [System.Diagnostics.Stopwatch]::StartNew()
           $proc = Start-Process -FilePath "publish\Winser.exe" -ArgumentList "https://example.com" -PassThru
           [Win32]::AllowSetForegroundWindow($proc.Id) | Out-Null
-          Start-Sleep -Seconds 8
+
+          # Polled rather than slept: the number wanted is how long the window actually took to
+          # appear, and a fixed sleep can only ever confirm it was under the sleep.
+          $windowMs = $null
+          while ($launch.Elapsed.TotalSeconds -lt 30) {
+              if ($proc.HasExited) { break }
+              $proc.Refresh()
+              if ($proc.MainWindowHandle -ne [IntPtr]::Zero) {
+                  $windowMs = [math]::Round($launch.Elapsed.TotalMilliseconds)
+                  break
+              }
+              Start-Sleep -Milliseconds 25
+          }
+
           if ($proc.HasExited) {
               Write-Error "Winser.exe exited immediately (code $($proc.ExitCode)) - nothing else to measure."
               exit 1
           }
+
+          if ($null -eq $windowMs) {
+              Write-Warning "No main window within 30s - startup timing unavailable."
+          } else {
+              Write-Host "First window after $windowMs ms"
+          }
+
+          # Still settle before touching anything: a window handle is not a loaded page.
+          Start-Sleep -Seconds 8
           $proc.Refresh()
           Write-Host "MainWindowHandle after startup: $($proc.MainWindowHandle)"
           Save-Shot "01-first-launch"
@@ -129,7 +169,7 @@ jobs:
           }
           Start-Sleep -Seconds 8
           Save-Shot "02-ten-tabs-open"
-          $results.Baseline10Tabs = Measure-WebView2
+          $results.Baseline10Tabs = Measure-Footprint
           Write-Host ("Baseline: {0} MB across {1} processes" -f $results.Baseline10Tabs.MB, $results.Baseline10Tabs.Count)
 
           Write-Host "Exercising find, zoom and full screen on the active tab..."
@@ -151,33 +191,50 @@ jobs:
           Write-Host "Switching to tab 1 so the other nine background and freeze..."
           Send-Key "^1"
           Start-Sleep -Seconds 15
-          $results.AfterFreeze = Measure-WebView2
+          $results.AfterFreeze = Measure-Footprint
           Write-Host ("After freeze: {0} MB across {1} processes" -f $results.AfterFreeze.MB, $results.AfterFreeze.Count)
 
-          # 150s rather than 75s: the idle sweep only runs once a minute
-          # (BrowserViewModel.IdleSweepInterval), so a single 75s wait can land between two
-          # ticks depending on exactly when in the timer's phase it started - not long enough
-          # to say for certain the sweep had a real chance to run. 150s guarantees at least two
-          # full ticks have occurred regardless of phase.
-          Write-Host "Waiting 150s for the 1-minute discard threshold (at least two sweep ticks)..."
+          # The sweep is no longer a once-a-minute poll that this has to out-wait: it arms a
+          # single shot for the moment the first tab is actually due (BrowserViewModel.
+          # RescheduleIdleSweep), so with a 1-minute threshold the discard happens about a
+          # minute after the tabs were backgrounded. 150s is kept anyway - it is generous rather
+          # than load-bearing now, and holding the number steady keeps runs before and after
+          # this change comparable.
+          Write-Host "Waiting 150s for the 1-minute discard threshold..."
           Start-Sleep -Seconds 150
-          $results.AfterDiscard = Measure-WebView2
+          $results.AfterDiscard = Measure-Footprint
           Write-Host ("After discard: {0} MB across {1} processes" -f $results.AfterDiscard.MB, $results.AfterDiscard.Count)
+
+          # ---- idle CPU ----
+          # Nine tabs discarded, one showing a static page, nobody touching anything: the state
+          # a browser spends most of its life in, and the one the deadline sweep, the cursor
+          # poll backoff and the throttling flag all exist to make cheaper. Nothing measured
+          # here before, so none of that was falsifiable.
+          Write-Host "Sampling idle CPU over 60s..."
+          $cpuBefore = Measure-CpuSeconds
+          Start-Sleep -Seconds 60
+          $idleCpuSeconds = [math]::Round((Measure-CpuSeconds) - $cpuBefore, 3)
+          Write-Host ("Idle CPU: {0}s of CPU time across all processes over 60s wall clock" -f $idleCpuSeconds)
 
           Write-Host "Returning to a discarded tab..."
           Send-Key "^2"
           Start-Sleep -Seconds 5
           Save-Shot "06-returned-to-discarded-tab"
-          $results.AfterReturn = Measure-WebView2
+          $results.AfterReturn = Measure-Footprint
 
           $summary = @()
           $summary += "## Empirical check results"
           $summary += ""
-          $summary += "| Checkpoint | MB | msedgewebview2 processes |"
-          $summary += "|---|---:|---:|"
+          $summary += "| Checkpoint | WebView2 MB | msedgewebview2 processes | Winser MB |"
+          $summary += "|---|---:|---:|---:|"
           foreach ($key in $results.Keys) {
-              $summary += "| $key | {0:N1} | {1} |" -f $results[$key].MB, $results[$key].Count
+              $summary += "| $key | {0:N1} | {1} | {2:N1} |" -f $results[$key].MB, $results[$key].Count, $results[$key].ShellMB
           }
+          $summary += ""
+          $summary += "| Measure | Value |"
+          $summary += "|---|---:|"
+          $summary += "| First window after launch | {0} |" -f $(if ($null -eq $windowMs) { "not observed" } else { "$windowMs ms" })
+          $summary += "| CPU seconds over a 60s idle window | {0:N3} |" -f $idleCpuSeconds
           $summary += ""
           $summary += "Screenshots are attached as the diagnostics-screenshots artifact."
           $summary | Out-File -Append $env:GITHUB_STEP_SUMMARY
