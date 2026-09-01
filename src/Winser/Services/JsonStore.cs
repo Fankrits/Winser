@@ -12,22 +12,37 @@ namespace Winser.Services;
 public sealed class JsonStore<T> : IDisposable
     where T : class
 {
-    private const int DebounceMilliseconds = 750;
+    /// <summary>
+    /// Long enough to collapse a burst of edits - typing in settings, toggling a checkbox - into
+    /// one write, short enough that the file on disk is never far behind what is on screen.
+    /// </summary>
+    public const int DefaultDebounceMilliseconds = 750;
 
     private readonly string _path;
     private readonly JsonTypeInfo<T> _typeInfo;
     private readonly Func<T> _factory;
     private readonly object _gate = new();
     private readonly Timer _timer;
+    private readonly int _debounceMilliseconds;
 
     private T? _pending;
     private bool _disposed;
 
-    public JsonStore(string fileName, JsonTypeInfo<T> typeInfo, Func<T> factory)
+    /// <param name="debounceMilliseconds">
+    /// How long a queued write waits for a quieter moment. Worth raising for a document that is
+    /// large and written often, where the cost is the serialize-and-replace of the whole thing
+    /// rather than the latency of getting it to disk - see <see cref="HistoryService"/>.
+    /// </param>
+    public JsonStore(
+        string fileName,
+        JsonTypeInfo<T> typeInfo,
+        Func<T> factory,
+        int debounceMilliseconds = DefaultDebounceMilliseconds)
     {
         _path = AppPaths.DataFile(fileName);
         _typeInfo = typeInfo;
         _factory = factory;
+        _debounceMilliseconds = debounceMilliseconds;
         _timer = new Timer(_ => Flush(), state: null, Timeout.Infinite, Timeout.Infinite);
     }
 
@@ -68,7 +83,7 @@ public sealed class JsonStore<T> : IDisposable
             }
 
             _pending = value;
-            _timer.Change(DebounceMilliseconds, Timeout.Infinite);
+            _timer.Change(_debounceMilliseconds, Timeout.Infinite);
         }
     }
 

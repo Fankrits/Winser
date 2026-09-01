@@ -37,6 +37,8 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     private IWebViewHost? _host;
     private bool _syncingZoom;
+    private DispatcherTimer? _suggestionTimer;
+    private string? _pendingSuggestionQuery;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsWeb), nameof(IsSettings), nameof(IsHistory))]
@@ -307,6 +309,9 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         _host?.Release();
         _host = null;
         _shell.RescheduleIdleSweep();
+
+        // A tab closed mid-typing must not leave a rebuild armed behind it.
+        _suggestionTimer?.Stop();
 
         // A tab that goes away mid-prompt (closed, window torn down) must still resolve every
         // deferral WebView2 is holding open, or those CoreWebView2 events never complete.
@@ -685,8 +690,56 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     // --------------------------------------------------------------- address bar
 
-    /// <summary>Rebuilds the address bar dropdown for the text the user has typed so far.</summary>
+    /// <summary>
+    /// How long the address bar waits after a keystroke before rebuilding its suggestions.
+    /// Below the threshold where a dropdown feels like it lags the typing, and above the gap
+    /// between characters of anyone typing a word.
+    /// </summary>
+    private static readonly TimeSpan SuggestionDebounce = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>
+    /// Queues a rebuild of the address bar dropdown for the text typed so far.
+    /// </summary>
+    /// <remarks>
+    /// Debounced because the rebuild is not cheap and was running once per character: it scans
+    /// history, ranks up to two hundred candidates, then clears and refills an
+    /// ObservableCollection - which makes the dropdown discard and rebuild its whole item list
+    /// every keystroke. Restarting the timer on each character means a word typed at speed costs
+    /// one pass instead of one per letter.
+    /// </remarks>
     public void UpdateSuggestions(string? query)
+    {
+        _pendingSuggestionQuery = query;
+
+        if (_suggestionTimer is null)
+        {
+            _suggestionTimer = new DispatcherTimer { Interval = SuggestionDebounce };
+            _suggestionTimer.Tick += OnSuggestionTimerTick;
+        }
+
+        _suggestionTimer.Stop();
+        _suggestionTimer.Start();
+    }
+
+    /// <summary>
+    /// Empties the dropdown and abandons any rebuild still pending, so a suggestion pass queued
+    /// by the last keystroke cannot repopulate the list after the address has been submitted.
+    /// </summary>
+    public void ClearSuggestions()
+    {
+        _suggestionTimer?.Stop();
+        _pendingSuggestionQuery = null;
+        Suggestions.Clear();
+    }
+
+    private void OnSuggestionTimerTick(object? sender, object e)
+    {
+        _suggestionTimer?.Stop();
+        BuildSuggestions(_pendingSuggestionQuery);
+    }
+
+    /// <summary>Rebuilds the address bar dropdown for the text the user has typed so far.</summary>
+    private void BuildSuggestions(string? query)
     {
         Suggestions.Clear();
 

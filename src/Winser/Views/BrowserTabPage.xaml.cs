@@ -152,7 +152,7 @@ public sealed partial class BrowserTabPage : UserControl
         }
 
         tab.IsAddressFocused = false;
-        tab.Suggestions.Clear();
+        tab.ClearSuggestions();
         WebContent?.FocusContent();
     }
 

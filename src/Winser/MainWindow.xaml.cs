@@ -877,7 +877,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         tab.IsAddressFocused = false;
-        tab.Suggestions.Clear();
+        tab.ClearSuggestions();
         tab.FocusWebContent();
     }
 
