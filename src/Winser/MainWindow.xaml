@@ -26,28 +26,21 @@
   <!--
     Transparent, not unset: lets Mica show through while keeping the whole window hit-testable.
 
-    Column 0 exists for vertical tabs mode only: a pane on the left standing in for the
-    horizontal strip. It is sized to zero and collapses to nothing when vertical tabs are off,
-    which is also the default - so nothing here changes horizontal mode's geometry. When vertical
-    tabs is on, this column's width tracks VerticalTabsPane's own width - the hover-zone width
-    collapsed, VerticalTabsExpandedWidth once expanded (see MainWindow.xaml.cs,
-    UpdateChromeLayout) - so TabStrip's column, and the page rendered inside it, genuinely shift
-    over as the pane opens and closes. An overlay that left this column alone and let the pane
-    bleed into TabStrip's space instead was tried first; on a real machine the live page painted
-    straight over it regardless, because WebContentView.xaml.cs hosts WebView2 in its default
-    child-HWND mode, which always wins that fight against XAML z-order, popup or plain sibling
-    alike. TabStrip's own Grid.Column never changes between modes and it deliberately has no
-    Grid.Row at all - its cell must stay anchored at y=0 in both modes, since that is what lets a
-    negative top margin (see MainWindow.xaml.cs, UpdateChromeLayout) push the native strip fully
-    off-screen above the window rather than just far enough to clear a reserved row; the vertical
-    mode drag region is a same-origin overlay, not a second row, for the same y=0 reason - see its
-    own comment below.
+    One cell, no columns and no rows: the page fills the window edge to edge in both modes. An
+    earlier vertical-tabs layout reserved a left column - first tracking the pane's full width so
+    the page shifted aside when it opened, later just the hover-zone width - and either way that
+    column was visible as a band of window background down the left of every page. Nothing
+    reserves space for vertical tabs now: the expanded pane is a windowed Popup that floats over
+    the page, and the hover trigger is the cursor's own position rather than an element needing
+    room to sit in (see MainWindow.xaml.cs).
+
+    TabStrip deliberately has no Grid.Row either - it must stay anchored at y=0 in both modes,
+    since that is what lets a negative top margin (see MainWindow.xaml.cs, UpdateChromeLayout)
+    push the native strip fully off-screen above the window rather than just far enough to clear a
+    reserved row; the vertical mode drag region is a same-origin overlay, not a second row, for
+    the same y=0 reason - see its own comment below.
   -->
   <Grid x:Name="RootGrid" Background="Transparent">
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition x:Name="VerticalTabsColumnDef" Width="0" />
-      <ColumnDefinition Width="*" />
-    </Grid.ColumnDefinitions>
 
     <!--
       VerticalAlignment is load-bearing, not cosmetic. TabView's own default style sets
@@ -63,7 +56,6 @@
     -->
     <TabView
       x:Name="TabStrip"
-      Grid.Column="1"
       CanDragTabs="True"
       CanReorderTabs="True"
       IsAddTabButtonVisible="True"
@@ -161,7 +153,6 @@
     -->
     <Grid
       x:Name="VerticalModeDragRegion"
-      Grid.Column="1"
       VerticalAlignment="Top"
       Background="{ThemeResource WinserChromeBrush}"
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
@@ -169,15 +160,17 @@
     <!--
       Vertical tabs mode's stand-in for the whole native strip.
 
-      This outer Grid is only ever the collapsed hover-zone - a transparent strip, always exactly
-      VerticalTabsHoverZoneWidth wide, that shows nothing at all (not even a thin rail) and exists
-      purely to notice the pointer arriving. VerticalTabsColumnDef matches it and never grows, so
-      TabStrip's column - and the page inside it - never shifts when the pane opens.
+      There is deliberately no hover strip element here any more, and RootGrid has no columns: the
+      page fills the window edge to edge, with nothing reserving a band down the left for the
+      pointer to land on. A strip would have had to stay clear of WebView2 to receive
+      PointerEntered at all, and that reserved band was visible as a sliver of window background
+      beside every page. So the hover trigger is the cursor's own position instead, polled in
+      MainWindow.xaml.cs - which no element can swallow, needs no screen space, and leaves the
+      leftmost pixels of the page clickable rather than covered by an invisible catcher.
 
-      The expanded chrome lives in the Popup below rather than inline here. ShouldConstrainToRootBounds
-      ="False" makes it a windowed popup, which gets its own HWND and so renders above WebView2's,
-      escaping the airspace problem that made a plain inline overlay invisible over a live page
-      (see UpdateChromeLayout). Unlike the owned top-level Window this used to be, a Popup has no
+      ShouldConstrainToRootBounds="False" makes this a windowed popup, which gets its own HWND and
+      so renders above WebView2's, escaping the airspace problem that made a plain inline overlay
+      invisible over a live page. Unlike the owned top-level Window this used to be, a Popup has no
       window frame for DWM to draw a border around - which is what the white outline was, through
       three failed attempts to suppress it at the window level. Rounded corners and theme are
       ordinary XAML here rather than DWM attributes and manual propagation.
@@ -187,18 +180,10 @@
       within the pane may not work. That issue predates the WinAppSDK 2.3 this project builds
       against; if it still reproduces, reordering is the thing to give up, not the floating.
     -->
-    <Grid
-      x:Name="VerticalTabsPane"
-      Grid.Column="0"
-      HorizontalAlignment="Left"
-      Background="Transparent"
-      Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}"
-      PointerEntered="OnVerticalTabsPanePointerEntered"
-      PointerExited="OnVerticalTabsPanePointerExited">
-      <Popup
-        x:Name="VerticalTabsFlyout"
-        ShouldConstrainToRootBounds="False"
-        IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
+    <Popup
+      x:Name="VerticalTabsFlyout"
+      ShouldConstrainToRootBounds="False"
+      IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
       <Border
         x:Name="VerticalTabsCard"
         Background="{ThemeResource WinserPaneBrush}"
@@ -440,8 +425,7 @@
         </ListView>
       </Grid>
       </Border>
-      </Popup>
-    </Grid>
+    </Popup>
 
   </Grid>
 </Window>

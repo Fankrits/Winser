@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -22,12 +23,11 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const int DefaultHeight = 860;
     private const int CascadeStep = 28;
 
-    // 16, not something thinner: Windows reserves roughly the outer 8px of every edge of a
-    // resizable window for its own invisible resize-drag hit-testing (WM_NCHITTEST), handled
-    // before a pointer event ever reaches XAML. A hover-zone at or below that width can end up
-    // entirely inside the OS's resize border, where PointerEntered never fires at all - which
-    // is indistinguishable from "vertical tabs doesn't work" from the pointer's own vantage
-    // point. The extra margin is free: this strip is fully transparent regardless of width.
+    // How close to the window's left edge the cursor has to get to open the pane. This is a band
+    // measured against the client rect, not an element - nothing occupies it, so the page keeps
+    // those pixels and stays clickable there. 16 rather than something thinner because the OS
+    // reserves roughly the outer 8px of a resizable window for its own resize-drag hit-testing,
+    // and a band inside that is awkward to hit deliberately.
     private const double VerticalTabsHoverZoneWidth = 16;
     private const double VerticalTabsExpandedWidth = 240;
 
@@ -39,18 +39,19 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsPaneMargin = 8;
 
     /// <summary>
-    /// Grace period between the pointer leaving one half of the hover surface and the pane
-    /// actually collapsing - long enough to cover the hand-off while the pointer crosses from the
-    /// collapsed strip into the expanded card, which are separate hit-test surfaces (the card is
-    /// a windowed Popup). See OnVerticalTabsPanePointerExited.
+    /// How often the cursor is checked against the left edge while vertical tabs is on. Fast
+    /// enough that reaching the edge feels immediate, slow enough to be free: it is one
+    /// GetCursorPos and a rectangle test, and only while the mode is actually enabled.
     /// </summary>
-    private const int VerticalTabsCollapseDelayMs = 150;
+    private const int VerticalTabsHoverPollMs = 100;
 
     private bool _isClosing;
     private bool _isWindowActive = true;
 
-    /// <summary>Created on first hover-out; see OnVerticalTabsPanePointerExited.</summary>
-    private DispatcherTimer? _verticalTabsCollapseTimer;
+    /// <summary>Created when vertical tabs is first switched on; see UpdateVerticalTabsHover.</summary>
+    private DispatcherTimer? _verticalTabsHoverTimer;
+
+    private bool _pointerOverVerticalTabsCard;
 
     public MainWindow(bool isPrivate = false, string? initialUrl = null)
     {
@@ -206,8 +207,8 @@ public sealed partial class MainWindow : Window, IShellWindow
         Activated -= OnActivationChanged;
         AppWindow.Changed -= OnAppWindowChanged;
 
-        _verticalTabsCollapseTimer?.Stop();
-        _verticalTabsCollapseTimer = null;
+        _verticalTabsHoverTimer?.Stop();
+        _verticalTabsHoverTimer = null;
 
         ViewModel.Detach();
         WindowManager.Unregister(this);
@@ -314,15 +315,17 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
 
-        // Constant at the hover-zone width whenever vertical tabs is on: the expanded chrome is a
-        // windowed Popup (see the XAML), which is not laid out in this Grid at all, so nothing
-        // here has to make room for it and the page never shifts when the pane opens. An earlier
-        // attempt did widen this column to match, which avoided the airspace problem by keeping
-        // the two rectangles from overlapping - at the cost of reflowing the page every time the
-        // pane was hovered. The popup gets its own HWND above WebView2's instead, so overlapping
-        // is fine now.
-        VerticalTabsColumnDef.Width = vertical ? new GridLength(VerticalTabsHoverZoneWidth) : new GridLength(0);
-        VerticalTabsPane.Width = VerticalTabsHoverZoneWidth;
+        // Nothing reserves layout space for vertical tabs: the expanded pane is a windowed Popup
+        // floating over the page, and the hover trigger is the cursor's position rather than an
+        // element (see UpdateVerticalTabsHover). The poll only needs to run while the mode is on.
+        if (vertical)
+        {
+            StartVerticalTabsHoverWatch();
+        }
+        else
+        {
+            StopVerticalTabsHoverWatch();
+        }
 
         UpdateVerticalTabsFlyout();
 
@@ -339,10 +342,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         // The vertical mode drag region overlays the same top strip TabStrip just vacated,
         // rather than reserving it, so it needs to match that same height to look intentional.
-        // No left-edge offset is needed here: VerticalModeDragRegion is Grid.Column="1", and
-        // that column now starts wherever VerticalTabsColumnDef ends, so it already clears the
-        // pane's header (app icon, pin button) whether collapsed or expanded without any
-        // compensating Margin.
+        // It spans the full width and needs no offset for the pane: the pane floats above it in
+        // its own popup and takes that input itself rather than competing for it.
         VerticalModeDragRegion.Height = TabStripHeight;
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
@@ -434,38 +435,113 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     /// <summary>Peeks the collapsed vertical tabs pane open while the pointer is over it.</summary>
-    // The hover surface is two elements, not one: the collapsed strip lives in this window, and
-    // the expanded card lives in a windowed Popup with its own HWND. Crossing from one to the
-    // other therefore fires an exit on the first and an enter on the second with no ordering
-    // guarantee between them, and acting on the exit directly makes the pane flicker or oscillate
-    // - close, pointer is over the strip again, open, repeat. So a leave only ever *schedules* a
-    // collapse, and any enter within the grace period cancels it. (The inline pane this replaced
-    // needed none of this: it was a single continuous element, so there was no hand-off at all.)
+    // ------------------------------------------------------------- vertical tabs hover
+    //
+    // The pane opens on the cursor reaching the window's left edge, decided by polling
+    // GetCursorPos rather than by PointerEntered on an element parked there. Two reasons, and the
+    // element approach failed both: it needed a band of the window kept clear of WebView2 to
+    // receive pointer events at all, which was visible as a strip of window background beside
+    // every page; and once the pane itself became a windowed Popup, the strip and the pane were
+    // separate hit-test surfaces, so crossing between them produced an exit and an enter with no
+    // ordering guarantee and the pane flickered.
+    //
+    // Polling has neither problem. Nothing can swallow a cursor position, so the page keeps every
+    // pixel including the leftmost ones, and both "at the edge" and "over the pane" are evaluated
+    // together on each tick - there is no hand-off between surfaces to race, so no debounce is
+    // needed either.
+
+    private void StartVerticalTabsHoverWatch()
+    {
+        _verticalTabsHoverTimer ??= CreateVerticalTabsHoverTimer();
+        _verticalTabsHoverTimer.Start();
+    }
+
+    private void StopVerticalTabsHoverWatch()
+    {
+        _verticalTabsHoverTimer?.Stop();
+        ViewModel.IsVerticalTabsPointerOver = false;
+    }
+
+    private DispatcherTimer CreateVerticalTabsHoverTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VerticalTabsHoverPollMs) };
+        timer.Tick += (_, _) => UpdateVerticalTabsHover();
+        return timer;
+    }
+
+    /// <summary>
+    /// One evaluation of both halves of "should the pane be open": the cursor is in the strip
+    /// down the left of this window's client area, or it is over the pane itself.
+    /// </summary>
+    private void UpdateVerticalTabsHover()
+    {
+        // Another app in front: its window is over these coordinates, so the cursor being within
+        // our edge band says nothing about what the user is pointing at.
+        if (GetForegroundWindow() != WindowHandle)
+        {
+            ViewModel.IsVerticalTabsPointerOver = false;
+            return;
+        }
+
+        ViewModel.IsVerticalTabsPointerOver = _pointerOverVerticalTabsCard || IsCursorAtLeftEdge();
+    }
+
+    private bool IsCursorAtLeftEdge()
+    {
+        if (!GetCursorPos(out var cursor))
+        {
+            return false;
+        }
+
+        var origin = default(POINT);
+        if (!ClientToScreen(WindowHandle, ref origin))
+        {
+            return false;
+        }
+
+        var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        if (scale <= 0)
+        {
+            scale = 1.0;
+        }
+
+        var width = (int)Math.Round(VerticalTabsHoverZoneWidth * scale);
+        var height = (int)Math.Round(RootGrid.ActualHeight * scale);
+
+        return cursor.X >= origin.X && cursor.X < origin.X + width &&
+               cursor.Y >= origin.Y && cursor.Y < origin.Y + height;
+    }
+
+    // The pane's own hover, folded into the poll above rather than driving the view model
+    // directly - so that leaving the pane for the page does not close it a tick before the poll
+    // would have agreed, and re-entering does not fight it.
 
     private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        _verticalTabsCollapseTimer?.Stop();
+        _pointerOverVerticalTabsCard = true;
         ViewModel.IsVerticalTabsPointerOver = true;
     }
 
-    private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e)
+    private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
+        _pointerOverVerticalTabsCard = false;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
     {
-        _verticalTabsCollapseTimer ??= CreateVerticalTabsCollapseTimer();
-        _verticalTabsCollapseTimer.Stop();
-        _verticalTabsCollapseTimer.Start();
+        public int X;
+        public int Y;
     }
 
-    private DispatcherTimer CreateVerticalTabsCollapseTimer()
-    {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VerticalTabsCollapseDelayMs) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            ViewModel.IsVerticalTabsPointerOver = false;
-        };
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out POINT point);
 
-        return timer;
-    }
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(nint hWnd, ref POINT point);
+
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
 
     /// <summary>
     /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to
