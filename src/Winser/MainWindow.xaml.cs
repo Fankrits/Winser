@@ -221,6 +221,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
     }
 
+    /// <summary>Whether this window is currently minimized. Read by <see cref="WindowManager"/>.</summary>
+    internal bool IsMinimized => _isMinimized;
+
     /// <summary>
     /// Re-evaluates from both signals together rather than reacting to each in isolation:
     /// minimizing normally deactivates the window too, and handling them independently would
@@ -234,6 +237,13 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         _isMinimized = minimized;
         UpdateCursorWatch();
+
+        // Deliberately driven by the minimized half of that signal alone, not by
+        // "minimized or deactivated" as the line above is. A window that has merely lost focus
+        // is still on screen and still has to paint - a video, an animation, a page finishing
+        // its load - and scheduling the process for efficiency there would be visible
+        // sluggishness in exchange for nothing. Only a window nobody can see is free.
+        WindowManager.UpdateProcessPowerState();
     }
 
     private void OnClosed(object sender, WindowEventArgs args)

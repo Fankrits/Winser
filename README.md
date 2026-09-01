@@ -303,8 +303,34 @@ you are *not* looking at, and that is where nearly all of a browser's memory act
   touching visibility or calling `TrySuspendAsync`.
 - **One CoreWebView2 per tab, sharing one environment**, so every tab in a window shares a
   single browser and GPU process rather than starting its own.
-- **No renderer flags.** Most of Chromium's memory switches buy their savings out of security or
-  correctness, so Winser sets none of them.
+- **Idle tabs are discarded on a deadline, not a poll.** The sweep that decides this used to be
+  a timer ticking once a minute per window for the life of the app, whether or not any tab was
+  discardable. It now computes when the first tab actually comes due and arms a single shot for
+  that moment - and arms nothing at all when no tab ever will, which is the common case of a
+  browser sitting on one tab. A tab that *refuses* to be discarded, because its focused field
+  looks like it holds something typed, is now left alone for five minutes rather than asked
+  again on the next tick: asking means running a script inside that tab's renderer, and that
+  renderer is frozen, so the check meant to save power was waking the process it had just put
+  to sleep, once a minute, indefinitely.
+- **The process asks to be scheduled as background work while every window is minimized** - the
+  documented Windows EcoQoS opt-in (`SetProcessInformation` with
+  `PROCESS_POWER_THROTTLING_EXECUTION_SPEED`), which prefers efficiency cores and a lower clock,
+  and is what Task Manager shows as "Efficiency mode". Deliberately keyed to *minimized* alone
+  and not to the "minimized or deactivated" signal the memory-pressure call above uses: a window
+  that has merely lost focus is still on screen and still has to paint. Winser's own process
+  only; the `msedgewebview2` processes are a separate, separately measured question.
+- **Three renderer flags, and only three.** Winser used to set none at all, on the grounds that
+  Chromium's memory and CPU switches generally buy their savings out of security or correctness.
+  That reasoning still holds and still rules out almost everything: no `--disable-gpu`, no
+  disabling SmartScreen, and specifically not `--disable-background-timer-throttling` or
+  `--disable-renderer-backgrounding`, which are common "make WebView2 faster" advice and are the
+  exact opposite of what a browser trying to save power wants. What is set is the narrow set
+  that costs neither - `IntensiveWakeUpThrottling` with a 10-second grace period (Chromium's own
+  battery feature), `MediaRouter` off, and `--no-pings` - because it reaches the one place the
+  freeze above cannot: timers inside cross-origin iframes and workers in the tab that *is*
+  selected. See `PowerBrowserArguments` in `Services/WebViewService.cs`, which also records the
+  standing risk: Microsoft states plainly that production apps should not ship browser flags,
+  since they can be altered or removed without notice.
 
 Winser's own managed footprint is small and stays bounded: history is capped at 10,000 entries,
 and everything persisted is a plain JSON file written by a debounced atomic replace.
@@ -332,6 +358,11 @@ Measured by driving a real, unattended Winser instance on a GitHub Actions `wind
 runner via `.github/workflows/diagnose.yml`, which also screenshots Mica, the find bar, zoom,
 and full screen, and prints `diagnostics.log` to the job summary - useful again the next time
 a change in this area needs the same kind of answer.
+
+Note what this table does and does not cover. It measures *resident memory* across the freeze
+and discard transitions, which is what it was built for. It says nothing about the idle CPU and
+wake-up behaviour the deadline sweep, EcoQoS and the throttling flag above exist to improve -
+that is a different number, sampled separately in the same workflow.
 
 ## Security
 
