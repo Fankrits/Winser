@@ -51,9 +51,11 @@ switch in settings. See [Memory](#memory).
 scheme, high-contrast theme resources, and full keyboard shortcuts.
 
 **Chrome that gets out of the way** — minimize, maximize and close, and the bar they sit on,
-are unpainted until the pointer reaches the window's top-right corner, then appear together.
-They are only unpainted, never disabled: clicks, Windows 11 snap layouts, dragging the window
-by its top edge and screen readers all behave exactly as they would otherwise.
+are gone until the pointer reaches the window's top-right corner, then come back together. The
+title bar is collapsed to zero height rather than the buttons being painted out (colour cannot
+hide them: while content is extended into the title bar, the alpha channel is ignored on every
+title-bar colour but the button backgrounds, so a "transparent" glyph is an opaque one). What
+comes back is the system's own title bar, so snap layouts, tooltips and narration are intact.
 
 ## Keyboard shortcuts
 

@@ -16,35 +16,27 @@ public static class ThemeHelper
     };
 
     /// <summary>
-    /// Applies the theme to a window's content and repaints the system caption buttons to match.
+    /// Applies the theme to a window's content and repaints the system caption buttons so they
+    /// stay legible on top of the Mica backdrop.
     /// </summary>
-    public static void Apply(FrameworkElement root, AppWindow appWindow, AppTheme theme, bool captionButtonsVisible)
+    public static void Apply(FrameworkElement root, AppWindow appWindow, AppTheme theme)
     {
         root.RequestedTheme = ToElementTheme(theme);
-        UpdateCaptionButtons(root, appWindow, captionButtonsVisible);
+        UpdateCaptionButtons(root, appWindow);
     }
 
-    /// <summary>
-    /// Paints the system caption buttons legibly on top of the Mica backdrop, or - when
-    /// <paramref name="visible"/> is false - paints them out of sight entirely.
-    /// </summary>
+    /// <summary>Recolours minimize/maximize/close for the current theme.</summary>
     /// <remarks>
-    /// <para>
-    /// Colour is the only lever there is. Once <c>ExtendsContentIntoTitleBar</c> is on, WinUI
-    /// draws minimize/maximize/close itself and <see cref="AppWindowTitleBar"/> exposes their
-    /// colours and no visibility at all - so the hidden state is every one of those colours set
-    /// transparent. That is also what makes it safe: hit-testing is untouched, so clicks, snap
-    /// layouts and screen readers carry on working while only the pixels go away.
-    /// </para>
-    /// <para>
-    /// The hover and pressed colours are part of the hidden state rather than left visible.
-    /// Leaving them set was the earlier attempt at this (1c1c013) and is what made the buttons
-    /// light up one at a time under the cursor and never as a group: Windows repaints only the
-    /// button the pointer is actually on. Which one shows is now decided by
-    /// <c>MainWindow.UpdateCaptionReveal</c>, from a zone rather than from a single button.
-    /// </para>
+    /// Colour cannot hide these buttons, and two commits tried before this comment existed.
+    /// While content is extended into the title bar, <see cref="AppWindowTitleBar"/> honours the
+    /// alpha channel on the button *background* colours and ignores it on every other one - so
+    /// <c>ButtonForegroundColor = Colors.Transparent</c> is not a transparent glyph, it is an
+    /// opaque white one, and the buttons stay exactly as visible as they were. Hiding them is
+    /// <c>TitleBarHeightOption.Collapsed</c>, which takes the whole reserved area to zero;
+    /// see <c>MainWindow.ApplyCaptionReveal</c>. This method only ever paints them visible,
+    /// because that is the only state in which they exist.
     /// </remarks>
-    public static void UpdateCaptionButtons(FrameworkElement root, AppWindow appWindow, bool visible)
+    public static void UpdateCaptionButtons(FrameworkElement root, AppWindow appWindow)
     {
         if (!AppWindowTitleBar.IsCustomizationSupported())
         {
@@ -61,11 +53,11 @@ public static class ThemeHelper
         bar.BackgroundColor = Colors.Transparent;
         bar.ButtonBackgroundColor = Colors.Transparent;
         bar.ButtonInactiveBackgroundColor = Colors.Transparent;
-        bar.ButtonForegroundColor = visible ? foreground : Colors.Transparent;
-        bar.ButtonInactiveForegroundColor = visible ? muted : Colors.Transparent;
-        bar.ButtonHoverBackgroundColor = visible ? hover : Colors.Transparent;
-        bar.ButtonHoverForegroundColor = visible ? foreground : Colors.Transparent;
-        bar.ButtonPressedBackgroundColor = visible ? pressed : Colors.Transparent;
-        bar.ButtonPressedForegroundColor = visible ? foreground : Colors.Transparent;
+        bar.ButtonForegroundColor = foreground;
+        bar.ButtonInactiveForegroundColor = muted;
+        bar.ButtonHoverBackgroundColor = hover;
+        bar.ButtonHoverForegroundColor = foreground;
+        bar.ButtonPressedBackgroundColor = pressed;
+        bar.ButtonPressedForegroundColor = foreground;
     }
 }

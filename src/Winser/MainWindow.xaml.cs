@@ -65,9 +65,9 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double CaptionSnapLayoutReach = 220;
 
     /// <summary>
-    /// Stands in for <c>TitleBar.RightInset</c> where the system does not report one - roughly
-    /// three caption buttons wide. Only reached when title bar customization is unsupported, in
-    /// which case the buttons cannot be recoloured either and the zone is only revealing the bar.
+    /// Stands in for <c>TitleBar.RightInset</c> until the system has reported one - roughly three
+    /// caption buttons wide. Winser starts collapsed, and a collapsed title bar reserves nothing,
+    /// so the real inset is not knowable until the first reveal.
     /// </summary>
     private const double FallbackCaptionInset = 138;
 
@@ -80,8 +80,16 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private bool _pointerOverVerticalTabsCard;
 
-    /// <summary>Whether the caption buttons and the bar they sit on are currently painted.</summary>
+    /// <summary>Whether the caption buttons and the bar they sit on are currently showing.</summary>
     private bool _isCaptionRevealed;
+
+    /// <summary>
+    /// The caption inset in DIPs, remembered across the reveal. <c>TitleBar.RightInset</c> reads
+    /// 0 while the title bar is collapsed, and reserving 0 would let the tab strip slide under
+    /// buttons that are one hover away from coming back - so the last real width is kept and the
+    /// reserved space never moves.
+    /// </summary>
+    private double _captionInset = FallbackCaptionInset;
 
     public MainWindow(bool isPrivate = false, string? initialUrl = null)
     {
@@ -98,6 +106,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(CustomDragRegion);
+        ApplyCaptionReveal();
 
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
         VerticalPrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
@@ -180,10 +189,10 @@ public sealed partial class MainWindow : Window, IShellWindow
         Activated -= OnFirstActivated;
         UpdateCaptionInset();
 
-        // The one thing about the caption buttons a screenshot cannot settle: whether this OS
-        // lets the app recolour them at all. Where it does not, the hidden state below is simply
-        // unreachable and Windows keeps painting them itself - which looks from the outside
-        // exactly like the reveal being broken, and is not.
+        // Winser starts with the title bar collapsed, so an inset and height of 0 here is the
+        // confirmation that it took - and a customization flag of False is the one reason it
+        // cannot, in which case Windows keeps drawing the buttons itself and no amount of
+        // reveal logic will move them.
         DiagnosticLog.Write(
             $"caption: customization={AppWindowTitleBar.IsCustomizationSupported()}, " +
             $"inset={AppWindow.TitleBar.RightInset}, height={AppWindow.TitleBar.Height}");
@@ -408,15 +417,13 @@ public sealed partial class MainWindow : Window, IShellWindow
         VerticalTabsCard.Height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
     }
 
-    // Both of these pass the current reveal state through rather than assuming visible: a theme
-    // change is not allowed to be the thing that paints hidden buttons back on.
     private void ApplyTheme() =>
-        ThemeHelper.Apply(RootGrid, AppWindow, AppServices.Settings.Current.Theme, _isCaptionRevealed);
+        ThemeHelper.Apply(RootGrid, AppWindow, AppServices.Settings.Current.Theme);
 
     private void OnSettingsChanged(object? sender, EventArgs e) => ApplyTheme();
 
     private void OnActualThemeChanged(FrameworkElement sender, object args) =>
-        ThemeHelper.UpdateCaptionButtons(RootGrid, AppWindow, _isCaptionRevealed);
+        ThemeHelper.UpdateCaptionButtons(RootGrid, AppWindow);
 
     /// <summary>Keeps the tab strip from sliding underneath the system caption buttons.</summary>
     private void UpdateCaptionInset()
@@ -432,7 +439,14 @@ public sealed partial class MainWindow : Window, IShellWindow
             scale = 1.0;
         }
 
-        CustomDragRegion.MinWidth = (AppWindow.TitleBar.RightInset / scale) + 16;
+        // Kept rather than read straight through: see _captionInset. A collapsed title bar
+        // reports nothing, and this runs on every resize, most of which happen collapsed.
+        if (AppWindow.TitleBar.RightInset > 0)
+        {
+            _captionInset = AppWindow.TitleBar.RightInset / scale;
+        }
+
+        CustomDragRegion.MinWidth = _captionInset + 16;
     }
 
     // ----------------------------------------------------------------------- input
@@ -553,15 +567,16 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     /// <summary>
-    /// Shows the caption buttons, and in vertical tabs mode the bar they sit on, while the cursor
-    /// is in the window's top-right corner - and paints both away again as soon as it leaves.
+    /// Brings the caption buttons back, along with the bar they sit on in vertical tabs mode,
+    /// while the cursor is in the window's top-right corner - and takes both away again as soon
+    /// as it leaves.
     /// </summary>
     /// <remarks>
     /// Unlike the pane above this deliberately does not check for the foreground window. Reaching
     /// for the close button of a window you have not focused yet is an ordinary way to close it,
-    /// and buttons that stayed invisible until after a click would be worse than no auto-hide at
-    /// all. A window that is genuinely behind another one has its corner covered by that window,
-    /// so painting its own buttons under there costs nothing and shows nothing.
+    /// and buttons that stayed gone until after a click would be worse than no auto-hide at all.
+    /// A window that is genuinely behind another one has its corner covered by that window, so
+    /// restoring its own buttons under there costs nothing and shows nothing.
     /// </remarks>
     private void UpdateCaptionReveal() => SetCaptionRevealed(IsCursorInCaptionZone());
 
@@ -573,8 +588,39 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         _isCaptionRevealed = revealed;
-        ThemeHelper.UpdateCaptionButtons(RootGrid, AppWindow, revealed);
-        TopChromeTint.Opacity = revealed ? 1 : 0;
+        ApplyCaptionReveal();
+
+        // Only now is there an inset to read: a collapsed title bar reserves nothing and reports
+        // 0, so the real width can only be picked up while the buttons are actually there.
+        if (revealed)
+        {
+            UpdateCaptionInset();
+        }
+    }
+
+    /// <summary>
+    /// Takes the caption buttons and the bar behind them in and out of existence together.
+    /// </summary>
+    /// <remarks>
+    /// Height, not colour. The buttons are drawn by the system and
+    /// <see cref="AppWindowTitleBar"/> ignores the alpha channel on their foreground colours
+    /// while content is extended into the title bar, so painting a glyph transparent paints it
+    /// opaque white instead - see <see cref="ThemeHelper.UpdateCaptionButtons"/>.
+    /// <see cref="TitleBarHeightOption.Collapsed"/> takes the reserved area to zero height, which
+    /// removes the buttons outright rather than trying to make them invisible in place; going
+    /// back to <see cref="TitleBarHeightOption.Standard"/> hands back the system's own buttons
+    /// with everything that comes with them - snap layouts, tooltips, hit-testing, narration.
+    /// </remarks>
+    private void ApplyCaptionReveal()
+    {
+        if (AppWindowTitleBar.IsCustomizationSupported())
+        {
+            AppWindow.TitleBar.PreferredHeightOption = _isCaptionRevealed
+                ? TitleBarHeightOption.Standard
+                : TitleBarHeightOption.Collapsed;
+        }
+
+        TopChromeTint.Opacity = _isCaptionRevealed ? 1 : 0;
     }
 
     private bool IsCursorInCaptionZone()
@@ -610,7 +656,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         var reach = _isCaptionRevealed ? (int)Math.Round(CaptionSnapLayoutReach * scale) : 0;
 
         var clientWidth = (int)Math.Round(RootGrid.ActualWidth * scale);
-        var inset = (int)Math.Max(AppWindow.TitleBar.RightInset, Math.Round(FallbackCaptionInset * scale));
+        var inset = (int)Math.Round(_captionInset * scale);
         var barHeight = (int)Math.Round(TabStripHeight * scale);
 
         var left = origin.X + clientWidth - inset - padding;
