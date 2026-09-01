@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Render the Winser app icon (Assets/Winser.ico + Assets/Winser.png).
+"""Render the Winser app icon (Assets/Winser.ico + Assets/Winser.png + the
+Assets/Msix/*.png package logos): the ring-and-crescent mark in dark ink on
+a white rounded-square plate.
 
 Everything is drawn analytically with signed distance fields and 4x supersampling,
 so the mark stays crisp at every size and the artwork can be regenerated from
@@ -17,24 +19,34 @@ import zlib
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src", "Winser", "Assets")
 
-# Brand gradient: indigo -> cyan, sampled along the top-left / bottom-right diagonal.
-GRAD_FROM = (99, 102, 241)
-GRAD_TO = (34, 211, 238)
+# Ink colour the mark is drawn in, on a white plate - so it reads the same
+# regardless of what's behind the icon (taskbar, Start tiles, dark theme).
+INK = (10, 10, 10)
+PLATE = (255, 255, 255)
 
-# The "W" skeleton in a [-1, 1] square, y pointing down.
-W_POINTS = [(-0.60, -0.46), (-0.32, 0.50), (0.00, -0.08), (0.32, 0.50), (0.60, -0.46)]
-W_HALF_WIDTH = 0.115
+# The mark: a ring with a crescent "bite" cut into a disc, centered in a
+# [-1, 1] square, y pointing down. Mirrored in Assets/Web/newtab.html's
+# inline SVG - keep the two in sync if this changes.
+R_OUTER = 0.78
+R_INNER = 0.60
+R_BLOB = 0.46
+R_BITE = 0.24
+BITE_DX = 0.29
 
 SS = 4  # supersampling factor per axis
 
 
-def _seg_distance(px, py, ax, ay, bx, by):
-    vx, vy = bx - ax, by - ay
-    wx, wy = px - ax, py - ay
-    denom = vx * vx + vy * vy
-    t = 0.0 if denom == 0 else max(0.0, min(1.0, (wx * vx + wy * vy) / denom))
-    dx, dy = wx - t * vx, wy - t * vy
-    return math.hypot(dx, dy)
+def _ring_distance(px, py, r_outer, r_inner):
+    d = math.hypot(px, py)
+    mid = (r_outer + r_inner) / 2.0
+    half = (r_outer - r_inner) / 2.0
+    return abs(d - mid) - half
+
+
+def _crescent_distance(px, py, blob_r, bite_r, bite_dx):
+    d_blob = math.hypot(px, py) - blob_r
+    d_bite = math.hypot(px - bite_dx, py) - bite_r
+    return max(d_blob, -d_bite)  # SDF subtraction: blob minus bite
 
 
 def _rounded_box_distance(px, py, half, radius):
@@ -47,8 +59,9 @@ def _rounded_box_distance(px, py, half, radius):
 
 def render(size: int) -> bytes:
     """Return `size` x `size` RGBA pixels, row-major."""
-    # Small icons need proportionally chunkier strokes to stay readable.
-    stroke = W_HALF_WIDTH * (1.0 + (0.55 if size <= 20 else 0.30 if size <= 32 else 0.0))
+    # Small icons need a proportionally chunkier ring to stay readable.
+    boost = 1.0 + (0.35 if size <= 20 else 0.18 if size <= 32 else 0.0)
+    r_inner = R_OUTER - (R_OUTER - R_INNER) * boost
     corner = 0.30 if size >= 32 else 0.24
     px_buf = bytearray(size * size * 4)
 
@@ -66,21 +79,17 @@ def render(size: int) -> bytes:
                         continue
                     plate_a = min(1.0, max(0.0, (0.01 - plate) / 0.02))
 
-                    # Diagonal gradient, 0 at top-left corner, 1 at bottom-right.
-                    t = min(1.0, max(0.0, (u + v + 2.0) / 4.0))
-                    r = GRAD_FROM[0] + (GRAD_TO[0] - GRAD_FROM[0]) * t
-                    g = GRAD_FROM[1] + (GRAD_TO[1] - GRAD_FROM[1]) * t
-                    b = GRAD_FROM[2] + (GRAD_TO[2] - GRAD_FROM[2]) * t
+                    r, g, b = PLATE
 
                     glyph = min(
-                        _seg_distance(u, v, *W_POINTS[i], *W_POINTS[i + 1])
-                        for i in range(len(W_POINTS) - 1)
-                    ) - stroke
+                        _ring_distance(u, v, R_OUTER, r_inner),
+                        _crescent_distance(u, v, R_BLOB, R_BITE, BITE_DX),
+                    )
                     glyph_a = min(1.0, max(0.0, (0.008 - glyph) / 0.016))
                     if glyph_a > 0.0:
-                        r += (255 - r) * glyph_a
-                        g += (255 - g) * glyph_a
-                        b += (255 - b) * glyph_a
+                        r += (INK[0] - r) * glyph_a
+                        g += (INK[1] - g) * glyph_a
+                        b += (INK[2] - b) * glyph_a
 
                     acc_r += r * plate_a
                     acc_g += g * plate_a
@@ -166,6 +175,15 @@ def main() -> None:
         f.write(to_png(256, images[256]))
     print(f"wrote {ico_path} ({os.path.getsize(ico_path)} bytes)")
     print(f"wrote {png_path} ({os.path.getsize(png_path)} bytes)")
+
+    # MSIX package logos - used only by the release workflow's MSIX build (see
+    # Package.appxmanifest). Same mark, just different canvas sizes.
+    msix_dir = os.path.join(OUT_DIR, "Msix")
+    for name, size in {"Square150x150Logo.png": 150, "Square44x44Logo.png": 44, "StoreLogo.png": 50}.items():
+        path = os.path.normpath(os.path.join(msix_dir, name))
+        with open(path, "wb") as f:
+            f.write(to_png(size, render(size)))
+        print(f"wrote {path} ({os.path.getsize(path)} bytes)")
 
 
 if __name__ == "__main__":

@@ -154,8 +154,28 @@
     <Grid
       x:Name="VerticalModeDragRegion"
       VerticalAlignment="Top"
-      Background="{ThemeResource WinserChromeBrush}"
-      Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}" />
+      Background="Transparent"
+      Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}">
+
+      <!--
+        The tint is a child rather than this Grid's own Background so that hiding it costs the
+        window nothing: the Grid stays laid out and stays the element handed to SetTitleBar, so
+        dragging the window by its top edge works whether the bar is showing or not. Transparent
+        rather than unset on the Grid for the usual reason - an unset Background is not
+        hit-testable, and this one has to be.
+
+        Opacity is driven from MainWindow.ApplyCaptionReveal, along with the caption buttons
+        this bar exists to make room for: page-first at rest, chrome when the pointer goes
+        looking for it. The transition is short and only on this half of the pair - the buttons
+        come back by the title bar being given its height again, which is not something there is
+        any way to animate; a slower fade here would leave them hanging over an empty bar.
+      -->
+      <Border x:Name="TopChromeTint" Background="{ThemeResource WinserChromeBrush}" Opacity="0">
+        <Border.OpacityTransition>
+          <ScalarTransition Duration="0:0:0.12" />
+        </Border.OpacityTransition>
+      </Border>
+    </Grid>
 
     <!--
       Vertical tabs mode's stand-in for the whole native strip.

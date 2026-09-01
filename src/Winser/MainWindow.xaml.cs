@@ -39,19 +39,57 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsPaneMargin = 8;
 
     /// <summary>
-    /// How often the cursor is checked against the left edge while vertical tabs is on. Fast
-    /// enough that reaching the edge feels immediate, slow enough to be free: it is one
-    /// GetCursorPos and a rectangle test, and only while the mode is actually enabled.
+    /// How often the cursor is checked against the zones below. Fast enough that reaching one
+    /// feels immediate, slow enough to be free: it is one GetCursorPos and two rectangle tests.
     /// </summary>
-    private const int VerticalTabsHoverPollMs = 100;
+    private const int CursorPollMs = 100;
+
+    /// <summary>
+    /// How far around the caption buttons the pointer counts as being at them, in pixels at 100%
+    /// scaling. The zone is the buttons plus this - deliberately forgiving, because nothing is
+    /// drawn there to aim at until the aiming has already worked.
+    /// </summary>
+    private const double CaptionRevealPadding = 16;
+
+    /// <summary>
+    /// How far back out it then has to go. Larger than <see cref="CaptionRevealPadding"/> so that
+    /// a cursor resting on the boundary cannot sample its way in and out and flicker the chrome.
+    /// </summary>
+    private const double CaptionRevealExitPadding = 28;
+
+    /// <summary>
+    /// Extra height the zone keeps below the bar once the buttons are showing, so that hovering
+    /// maximize and reaching down into the Windows 11 snap layout flyout - which drops straight
+    /// down out of that button - does not paint the buttons out from under the pointer.
+    /// </summary>
+    private const double CaptionSnapLayoutReach = 220;
+
+    /// <summary>
+    /// Stands in for <c>TitleBar.RightInset</c> until the system has reported one - roughly three
+    /// caption buttons wide. Winser starts collapsed, and a collapsed title bar reserves nothing,
+    /// so the real inset is not knowable until the first reveal.
+    /// </summary>
+    private const double FallbackCaptionInset = 138;
 
     private bool _isClosing;
     private bool _isWindowActive = true;
+    private bool _isMinimized;
 
-    /// <summary>Created when vertical tabs is first switched on; see UpdateVerticalTabsHover.</summary>
-    private DispatcherTimer? _verticalTabsHoverTimer;
+    /// <summary>The one cursor poll both hover behaviours share; see the cursor watch section.</summary>
+    private DispatcherTimer? _cursorWatchTimer;
 
     private bool _pointerOverVerticalTabsCard;
+
+    /// <summary>Whether the caption buttons and the bar they sit on are currently showing.</summary>
+    private bool _isCaptionRevealed;
+
+    /// <summary>
+    /// The caption inset in DIPs, remembered across the reveal. <c>TitleBar.RightInset</c> reads
+    /// 0 while the title bar is collapsed, and reserving 0 would let the tab strip slide under
+    /// buttons that are one hover away from coming back - so the last real width is kept and the
+    /// reserved space never moves.
+    /// </summary>
+    private double _captionInset = FallbackCaptionInset;
 
     public MainWindow(bool isPrivate = false, string? initialUrl = null)
     {
@@ -68,6 +106,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(CustomDragRegion);
+        ApplyCaptionReveal();
 
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
         VerticalPrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
@@ -150,6 +189,14 @@ public sealed partial class MainWindow : Window, IShellWindow
         Activated -= OnFirstActivated;
         UpdateCaptionInset();
 
+        // Winser starts with the title bar collapsed, so an inset and height of 0 here is the
+        // confirmation that it took - and a customization flag of False is the one reason it
+        // cannot, in which case Windows keeps drawing the buttons itself and no amount of
+        // reveal logic will move them.
+        DiagnosticLog.Write(
+            $"caption: customization={AppWindowTitleBar.IsCustomizationSupported()}, " +
+            $"inset={AppWindow.TitleBar.RightInset}, height={AppWindow.TitleBar.Height}");
+
         // The constructor's own UpdateChromeLayout() call runs before the first layout pass, so
         // TabStripHeight was still falling back to FallbackTabStripHeight then. If vertical tabs
         // was already on at startup (a persisted setting, not something toggled just now), that
@@ -184,6 +231,9 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         var minimized = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
         ViewModel.SetAllTabsMemoryPressure(minimized || !_isWindowActive);
+
+        _isMinimized = minimized;
+        UpdateCursorWatch();
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
@@ -207,8 +257,8 @@ public sealed partial class MainWindow : Window, IShellWindow
         Activated -= OnActivationChanged;
         AppWindow.Changed -= OnAppWindowChanged;
 
-        _verticalTabsHoverTimer?.Stop();
-        _verticalTabsHoverTimer = null;
+        _cursorWatchTimer?.Stop();
+        _cursorWatchTimer = null;
 
         ViewModel.Detach();
         WindowManager.Unregister(this);
@@ -317,15 +367,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         // Nothing reserves layout space for vertical tabs: the expanded pane is a windowed Popup
         // floating over the page, and the hover trigger is the cursor's position rather than an
-        // element (see UpdateVerticalTabsHover). The poll only needs to run while the mode is on.
-        if (vertical)
-        {
-            StartVerticalTabsHoverWatch();
-        }
-        else
-        {
-            StopVerticalTabsHoverWatch();
-        }
+        // element (see the cursor watch section).
+        UpdateCursorWatch();
 
         UpdateVerticalTabsFlyout();
 
@@ -396,7 +439,14 @@ public sealed partial class MainWindow : Window, IShellWindow
             scale = 1.0;
         }
 
-        CustomDragRegion.MinWidth = (AppWindow.TitleBar.RightInset / scale) + 16;
+        // Kept rather than read straight through: see _captionInset. A collapsed title bar
+        // reports nothing, and this runs on every resize, most of which happen collapsed.
+        if (AppWindow.TitleBar.RightInset > 0)
+        {
+            _captionInset = AppWindow.TitleBar.RightInset / scale;
+        }
+
+        CustomDragRegion.MinWidth = _captionInset + 16;
     }
 
     // ----------------------------------------------------------------------- input
@@ -434,38 +484,68 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
     }
 
-    /// <summary>Peeks the collapsed vertical tabs pane open while the pointer is over it.</summary>
-    // ------------------------------------------------------------- vertical tabs hover
+    // --------------------------------------------------------------- cursor watch
     //
-    // The pane opens on the cursor reaching the window's left edge, decided by polling
-    // GetCursorPos rather than by PointerEntered on an element parked there. Two reasons, and the
-    // element approach failed both: it needed a band of the window kept clear of WebView2 to
-    // receive pointer events at all, which was visible as a strip of window background beside
-    // every page; and once the pane itself became a windowed Popup, the strip and the pane were
-    // separate hit-test surfaces, so crossing between them produced an exit and an enter with no
-    // ordering guarantee and the pane flickered.
+    // Two pieces of chrome appear on the cursor reaching an edge of the window: the vertical tabs
+    // pane at the left, and the caption buttons with the bar they sit on at the top right. Both
+    // are decided by polling GetCursorPos rather than by PointerEntered on an element parked
+    // there, and neither could work any other way.
+    //
+    // The pane tried the element approach first and failed twice over: it needed a band of the
+    // window kept clear of WebView2 to receive pointer events at all, which was visible as a
+    // strip of window background beside every page; and once the pane itself became a windowed
+    // Popup, the strip and the pane were separate hit-test surfaces, so crossing between them
+    // produced an exit and an enter with no ordering guarantee and the pane flickered.
+    //
+    // The caption zone has no element to attach to even in principle. SetTitleBar hands that
+    // whole band to the system as a caption region, so it is non-client and raises no XAML
+    // pointer events at all, and the buttons inside it are drawn by WinUI rather than by
+    // anything in this tree. InputNonClientPointerSource reports non-client regions, but the
+    // ones it reports are those an app registers for buttons it draws itself.
     //
     // Polling has neither problem. Nothing can swallow a cursor position, so the page keeps every
-    // pixel including the leftmost ones, and both "at the edge" and "over the pane" are evaluated
-    // together on each tick - there is no hand-off between surfaces to race, so no debounce is
-    // needed either.
+    // pixel including the ones under these zones, and every question is answered from the same
+    // tick - there is no hand-off between surfaces to race, so no debounce is needed either.
 
-    private void StartVerticalTabsHoverWatch()
+    /// <summary>
+    /// Runs the poll unless the window is minimized, which is the one state where neither zone
+    /// can be pointed at. Idempotent, so every caller that changes the window's shape can just
+    /// call it.
+    /// </summary>
+    private void UpdateCursorWatch()
     {
-        _verticalTabsHoverTimer ??= CreateVerticalTabsHoverTimer();
-        _verticalTabsHoverTimer.Start();
+        if (_isClosing)
+        {
+            _cursorWatchTimer?.Stop();
+            return;
+        }
+
+        if (_isMinimized)
+        {
+            _cursorWatchTimer?.Stop();
+            ViewModel.IsVerticalTabsPointerOver = false;
+            SetCaptionRevealed(false);
+            return;
+        }
+
+        _cursorWatchTimer ??= CreateCursorWatchTimer();
+
+        // Start() on a running timer restarts its interval, which a burst of activation changes
+        // could otherwise use to starve the tick indefinitely.
+        if (!_cursorWatchTimer.IsEnabled)
+        {
+            _cursorWatchTimer.Start();
+        }
     }
 
-    private void StopVerticalTabsHoverWatch()
+    private DispatcherTimer CreateCursorWatchTimer()
     {
-        _verticalTabsHoverTimer?.Stop();
-        ViewModel.IsVerticalTabsPointerOver = false;
-    }
-
-    private DispatcherTimer CreateVerticalTabsHoverTimer()
-    {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(VerticalTabsHoverPollMs) };
-        timer.Tick += (_, _) => UpdateVerticalTabsHover();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CursorPollMs) };
+        timer.Tick += (_, _) =>
+        {
+            UpdateVerticalTabsHover();
+            UpdateCaptionReveal();
+        };
         return timer;
     }
 
@@ -477,13 +557,113 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         // Another app in front: its window is over these coordinates, so the cursor being within
         // our edge band says nothing about what the user is pointing at.
-        if (GetForegroundWindow() != WindowHandle)
+        if (!ViewModel.IsVerticalTabsPaneVisible || GetForegroundWindow() != WindowHandle)
         {
             ViewModel.IsVerticalTabsPointerOver = false;
             return;
         }
 
         ViewModel.IsVerticalTabsPointerOver = _pointerOverVerticalTabsCard || IsCursorAtLeftEdge();
+    }
+
+    /// <summary>
+    /// Brings the caption buttons back, along with the bar they sit on in vertical tabs mode,
+    /// while the cursor is in the window's top-right corner - and takes both away again as soon
+    /// as it leaves.
+    /// </summary>
+    /// <remarks>
+    /// Unlike the pane above this deliberately does not check for the foreground window. Reaching
+    /// for the close button of a window you have not focused yet is an ordinary way to close it,
+    /// and buttons that stayed gone until after a click would be worse than no auto-hide at all.
+    /// A window that is genuinely behind another one has its corner covered by that window, so
+    /// restoring its own buttons under there costs nothing and shows nothing.
+    /// </remarks>
+    private void UpdateCaptionReveal() => SetCaptionRevealed(IsCursorInCaptionZone());
+
+    private void SetCaptionRevealed(bool revealed)
+    {
+        if (_isCaptionRevealed == revealed)
+        {
+            return;
+        }
+
+        _isCaptionRevealed = revealed;
+        ApplyCaptionReveal();
+
+        // Only now is there an inset to read: a collapsed title bar reserves nothing and reports
+        // 0, so the real width can only be picked up while the buttons are actually there.
+        if (revealed)
+        {
+            UpdateCaptionInset();
+        }
+    }
+
+    /// <summary>
+    /// Takes the caption buttons and the bar behind them in and out of existence together.
+    /// </summary>
+    /// <remarks>
+    /// Height, not colour. The buttons are drawn by the system and
+    /// <see cref="AppWindowTitleBar"/> ignores the alpha channel on their foreground colours
+    /// while content is extended into the title bar, so painting a glyph transparent paints it
+    /// opaque white instead - see <see cref="ThemeHelper.UpdateCaptionButtons"/>.
+    /// <see cref="TitleBarHeightOption.Collapsed"/> takes the reserved area to zero height, which
+    /// removes the buttons outright rather than trying to make them invisible in place; going
+    /// back to <see cref="TitleBarHeightOption.Standard"/> hands back the system's own buttons
+    /// with everything that comes with them - snap layouts, tooltips, hit-testing, narration.
+    /// </remarks>
+    private void ApplyCaptionReveal()
+    {
+        if (AppWindowTitleBar.IsCustomizationSupported())
+        {
+            AppWindow.TitleBar.PreferredHeightOption = _isCaptionRevealed
+                ? TitleBarHeightOption.Standard
+                : TitleBarHeightOption.Collapsed;
+        }
+
+        TopChromeTint.Opacity = _isCaptionRevealed ? 1 : 0;
+    }
+
+    private bool IsCursorInCaptionZone()
+    {
+        // Full screen has no caption buttons and no bar under them, so there is nothing the zone
+        // could reveal - and TitleBar reports no inset to anchor it to either.
+        if (ViewModel.IsFullScreen)
+        {
+            return false;
+        }
+
+        if (!GetCursorPos(out var cursor))
+        {
+            return false;
+        }
+
+        var origin = default(POINT);
+        if (!ClientToScreen(WindowHandle, ref origin))
+        {
+            return false;
+        }
+
+        var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        if (scale <= 0)
+        {
+            scale = 1.0;
+        }
+
+        // Anchored to the client area rather than to AppWindow.Position, which is the outer rect:
+        // a maximized window's outer rect hangs off every screen edge by the width of its
+        // invisible resize border, and a corner measured from it would sit that far out.
+        var padding = (int)Math.Round((_isCaptionRevealed ? CaptionRevealExitPadding : CaptionRevealPadding) * scale);
+        var reach = _isCaptionRevealed ? (int)Math.Round(CaptionSnapLayoutReach * scale) : 0;
+
+        var clientWidth = (int)Math.Round(RootGrid.ActualWidth * scale);
+        var inset = (int)Math.Round(_captionInset * scale);
+        var barHeight = (int)Math.Round(TabStripHeight * scale);
+
+        var left = origin.X + clientWidth - inset - padding;
+        var top = origin.Y - padding;
+
+        return cursor.X >= left && cursor.X <= origin.X + clientWidth + padding &&
+               cursor.Y >= top && cursor.Y <= origin.Y + barHeight + reach + padding;
     }
 
     private bool IsCursorAtLeftEdge()

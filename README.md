@@ -50,6 +50,13 @@ switch in settings. See [Memory](#memory).
 **Fit and finish** — Mica backdrop, light/dark/system theme that also drives the page colour
 scheme, high-contrast theme resources, and full keyboard shortcuts.
 
+**Chrome that gets out of the way** — minimize, maximize and close, and the bar they sit on,
+are gone until the pointer reaches the window's top-right corner, then come back together. The
+title bar is collapsed to zero height rather than the buttons being painted out (colour cannot
+hide them: while content is extended into the title bar, the alpha channel is ignored on every
+title-bar colour but the button backgrounds, so a "transparent" glyph is an opaque one). What
+comes back is the system's own title bar, so snap layouts, tooltips and narration are intact.
+
 ## Keyboard shortcuts
 
 | | |
