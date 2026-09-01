@@ -438,10 +438,18 @@
     </Border>
 
     <!--  ============================= load state ============================  -->
+    <!--
+      IsIndeterminate is bound rather than hardcoded true, and that is a power fix rather than
+      a tidy-up. An indeterminate ProgressBar runs a continuous composition animation, and
+      collapsing it only stops it being drawn - the storyboard keeps running, which keeps the
+      compositor waking every frame and holds the display pipeline out of its idle state for
+      as long as the tab exists. Bound, the animation is torn down when loading finishes
+      instead of merely hidden. Visibility stays: it is what reserves no space in the layout.
+    -->
     <ProgressBar
       Grid.Row="2"
       Height="2"
-      IsIndeterminate="True"
+      IsIndeterminate="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
       Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
 
     <!--  ============================== content ==============================  -->

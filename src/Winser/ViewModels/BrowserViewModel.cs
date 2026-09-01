@@ -29,17 +29,26 @@ public sealed partial class BrowserViewModel : ObservableObject
     private const VirtualKey MinusKey = (VirtualKey)189;
 
     /// <summary>
-    /// One per window rather than one per tab: a tab is cheap to check (a DateTimeOffset
-    /// comparison), so paying for a whole timer's worth of overhead per tab just to save
-    /// overhead elsewhere would be backwards.
+    /// Floor on how soon the idle sweep may be armed. Only reachable when a deadline has
+    /// already passed (a threshold lowered in settings while tabs sat idle), where it stops
+    /// the timer re-arming itself at zero delay in a tight loop.
     /// </summary>
-    private static readonly TimeSpan IdleSweepInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan MinimumSweepDelay = TimeSpan.FromSeconds(5);
 
     private readonly List<ClosedTab> _closedTabs = [];
-    private readonly DispatcherTimer _idleSweepTimer;
+
+    /// <summary>
+    /// Constructed in the field initializer, not the constructor body, and that placement is
+    /// load-bearing: the body assigns HasActiveDownloads, whose generated change handler calls
+    /// RescheduleIdleSweep, which touches this timer. A field initializer runs before any of
+    /// that, so there is no ordering in the body that can reach a null here.
+    /// </summary>
+    private readonly DispatcherTimer _idleSweepTimer = new();
 
     private IShellWindow? _window;
     private Task<WebViewProfile>? _profileTask;
+    private bool _sweeping;
+    private bool _detached;
 
     [ObservableProperty]
     public partial BrowserTabViewModel? SelectedTab { get; set; }
@@ -102,9 +111,10 @@ public sealed partial class BrowserViewModel : ObservableObject
 
         RebuildBookmarkBar();
 
-        _idleSweepTimer = new DispatcherTimer { Interval = IdleSweepInterval };
+        // Deliberately never Start()ed here. The timer is armed only once there is a tab that
+        // will actually become discardable, and for the moment it does - see RescheduleIdleSweep.
         _idleSweepTimer.Tick += OnIdleSweepTick;
-        _idleSweepTimer.Start();
+        RescheduleIdleSweep();
     }
 
     public bool IsPrivate { get; }
@@ -180,6 +190,11 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
+    partial void OnSelectedTabChanged(BrowserTabViewModel? value) => RescheduleIdleSweep();
+
+    /// <summary>A download starting or finishing gates the whole sweep; see NextDiscardDueUtc.</summary>
+    partial void OnHasActiveDownloadsChanged(bool value) => RescheduleIdleSweep();
+
     partial void OnIsFullScreenChanged(bool value)
     {
         foreach (var tab in Tabs)
@@ -235,6 +250,7 @@ public sealed partial class BrowserViewModel : ObservableObject
             SelectedTab = tab;
         }
 
+        RescheduleIdleSweep();
         return tab;
     }
 
@@ -406,6 +422,10 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     public void Detach()
     {
+        // Set before anything else: the DetachHost loop below calls back into
+        // RescheduleIdleSweep, which would otherwise restart the timer on a dead window.
+        _detached = true;
+
         _idleSweepTimer.Stop();
         _idleSweepTimer.Tick -= OnIdleSweepTick;
 
@@ -423,13 +443,52 @@ public sealed partial class BrowserViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Discards a background tab's renderer once it has sat unwatched past the configured
-    /// threshold. A snapshot of <see cref="Tabs"/> rather than a live enumeration: closing this
-    /// window's tabs is a user action that can happen at any time, including while this loop is
-    /// suspended on the await inside TryDiscardAsync, and mutating an ObservableCollection out
-    /// from under an in-progress foreach throws.
+    /// Arms the idle-discard timer for the moment the first tab actually becomes eligible, or
+    /// leaves it stopped when none ever will.
     /// </summary>
-    private async void OnIdleSweepTick(object? sender, object e)
+    /// <remarks>
+    /// <para>
+    /// This replaces a timer that ticked once a minute for the life of every window whether or
+    /// not there was anything to discard - a wake-up per window per minute that, on a laptop,
+    /// is paid for in battery whether or not it finds work. A browser sitting on one tab now
+    /// arms no timer at all.
+    /// </para>
+    /// <para>
+    /// Called from every input the deadline depends on: tab added, tab closed, selection
+    /// changed, a host attached or released, a tab starting or stopping audio, the threshold
+    /// changed in settings, and a download starting or finishing. Missing one of those would
+    /// mean a tab discarded late rather than never - the sweep re-arms itself after every run -
+    /// but they are cheap to hook and the whole point is not to guess.
+    /// </para>
+    /// </remarks>
+    public void RescheduleIdleSweep()
+    {
+        if (_detached)
+        {
+            return;
+        }
+
+        _idleSweepTimer.Stop();
+
+        if (NextDiscardDueUtc() is not { } due)
+        {
+            return;
+        }
+
+        var delay = due - DateTimeOffset.UtcNow;
+        _idleSweepTimer.Interval = delay < MinimumSweepDelay ? MinimumSweepDelay : delay;
+        _idleSweepTimer.Start();
+    }
+
+    /// <summary>
+    /// When the earliest-expiring discardable tab comes due, or null when this window has none.
+    /// </summary>
+    /// <remarks>
+    /// Every check here is free - a field read and a comparison. Nothing in this method touches
+    /// a page, which is the point: deciding whether to arm a timer must not cost a script
+    /// round-trip into a renderer that is asleep.
+    /// </remarks>
+    private DateTimeOffset? NextDiscardDueUtc()
     {
         var minutes = AppServices.Settings.Current.DiscardIdleTabsAfterMinutes;
 
@@ -441,13 +500,85 @@ public sealed partial class BrowserViewModel : ObservableObject
         // renderer closing under a transfer that turns out to depend on it.
         if (minutes <= 0 || HasActiveDownloads)
         {
+            return null;
+        }
+
+        var threshold = TimeSpan.FromMinutes(minutes);
+        DateTimeOffset? earliest = null;
+
+        foreach (var tab in Tabs)
+        {
+            if (ReferenceEquals(tab, SelectedTab) || !tab.IsDiscardable)
+            {
+                continue;
+            }
+
+            var due = tab.LastActiveUtc + threshold;
+            if (due < tab.DiscardRetryAfterUtc)
+            {
+                due = tab.DiscardRetryAfterUtc;
+            }
+
+            if (earliest is null || due < earliest)
+            {
+                earliest = due;
+            }
+        }
+
+        return earliest;
+    }
+
+    private async void OnIdleSweepTick(object? sender, object e)
+    {
+        // Single-shot by construction: DispatcherTimer repeats, so the run is stopped here and
+        // the next one is scheduled from the deadlines that exist once this sweep is done.
+        _idleSweepTimer.Stop();
+
+        if (_sweeping)
+        {
             return;
         }
 
-        var cutoff = DateTimeOffset.UtcNow.AddMinutes(-minutes);
+        _sweeping = true;
+        try
+        {
+            await DiscardIdleTabsAsync();
+        }
+        finally
+        {
+            _sweeping = false;
+            RescheduleIdleSweep();
+        }
+    }
+
+    /// <summary>
+    /// Discards every background tab that has sat unwatched past the configured threshold.
+    /// </summary>
+    /// <remarks>
+    /// A snapshot of <see cref="Tabs"/> rather than a live enumeration: closing this window's
+    /// tabs is a user action that can happen at any time, including while this loop is suspended
+    /// on the await inside TryDiscardAsync, and mutating an ObservableCollection out from under
+    /// an in-progress foreach throws. Every cheap disqualifier is checked before that await, so
+    /// the one expensive step - running a script inside the page to look for unsaved input -
+    /// only happens for a tab that is otherwise about to be discarded.
+    /// </remarks>
+    private async Task DiscardIdleTabsAsync()
+    {
+        var minutes = AppServices.Settings.Current.DiscardIdleTabsAfterMinutes;
+        if (minutes <= 0 || HasActiveDownloads)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var cutoff = now.AddMinutes(-minutes);
+
         foreach (var tab in Tabs.ToList())
         {
-            if (ReferenceEquals(tab, SelectedTab) || tab.LastActiveUtc > cutoff)
+            if (ReferenceEquals(tab, SelectedTab) ||
+                !tab.IsDiscardable ||
+                tab.LastActiveUtc > cutoff ||
+                tab.DiscardRetryAfterUtc > now)
             {
                 continue;
             }
@@ -714,6 +845,9 @@ public sealed partial class BrowserViewModel : ObservableObject
         {
             tab.ApplyPreferences();
         }
+
+        // DiscardIdleTabsAfterMinutes may have just changed, which moves every deadline.
+        RescheduleIdleSweep();
     }
 
     private void OnBookmarksChanged(object? sender, NotifyCollectionChangedEventArgs e)
