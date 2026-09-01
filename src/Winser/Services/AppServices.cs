@@ -41,7 +41,7 @@ public static class AppServices
 
     /// <summary>
     /// Builds what the first window cannot open without, starts the browser engine coming up
-    /// alongside it, and leaves the rest warming behind both.
+    /// alongside it, and leaves the one genuinely expensive service warming behind both.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -57,11 +57,15 @@ public static class AppServices
     /// synchronous load for a synchronous wait and buy nothing.
     /// </para>
     /// <para>
-    /// <see cref="History"/> and <see cref="Permissions"/> are different: nothing touches the
-    /// first until a navigation completes or the address bar is typed into, or the second until
-    /// a page asks for the camera. History is also by far the most expensive of the seven - up
-    /// to 10,000 entries to deserialize, sort and index - which is what makes it the one worth
-    /// moving.
+    /// <see cref="History"/> is the exception worth making, and the only one taken. Nothing
+    /// touches it until a navigation completes or the address bar is typed into, and it is by
+    /// far the most expensive of the seven: up to 10,000 entries to deserialize, sort and index.
+    /// It is also the only one of them backed by a plain <see cref="List{T}"/> rather than an
+    /// <c>ObservableCollection</c>, so building it away from the UI thread raises no question
+    /// about which thread a collection-changed notification would arrive on.
+    /// <see cref="Permissions"/> is a similarly late-needed service but stays here for exactly
+    /// that reason - its file is small enough that moving it would buy nothing worth the
+    /// question.
     /// </para>
     /// </remarks>
     public static void Initialize()
@@ -72,20 +76,23 @@ public static class AppServices
         // here it runs alongside them instead.
         StartBrowserWarmUp();
 
+        // Synchronous, deliberately. This deletes leftover InPrivate folders, and opening an
+        // InPrivate window creates one; run in the background, its directory enumeration could
+        // sweep up a folder a window had just created and was still using. Here, before any
+        // window exists, no such folder can. It costs one syscall against an empty directory in
+        // the normal case - there is only real work to do after an unclean shutdown.
+        AppPaths.CleanUpPrivateProfiles();
+
         _ = Settings;
         _ = Session;
         _ = Bookmarks;
         _ = Downloads;
+        _ = Permissions;
 
-        // Nothing in here touches the UI, and the lazy accessors above make the handover safe:
-        // a caller that gets there before the warm-up does simply constructs the service itself,
-        // exactly as it did when this method built all seven inline.
-        _ = Task.Run(() =>
-        {
-            AppPaths.CleanUpPrivateProfiles();
-            _ = History;
-            _ = Permissions;
-        });
+        // The lazy accessors above are what make this safe to hand off: a caller that gets there
+        // before the warm-up does simply constructs the service itself, exactly as it did when
+        // this method built all seven inline.
+        _ = Task.Run(() => _ = History);
     }
 
     /// <summary>Flushes every pending write. Called from App.Exit.</summary>
