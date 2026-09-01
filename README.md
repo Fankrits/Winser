@@ -50,6 +50,11 @@ switch in settings. See [Memory](#memory).
 **Fit and finish** — Mica backdrop, light/dark/system theme that also drives the page colour
 scheme, high-contrast theme resources, and full keyboard shortcuts.
 
+**Chrome that gets out of the way** — minimize, maximize and close, and the bar they sit on,
+are unpainted until the pointer reaches the window's top-right corner, then appear together.
+They are only unpainted, never disabled: clicks, Windows 11 snap layouts, dragging the window
+by its top edge and screen readers all behave exactly as they would otherwise.
+
 ## Keyboard shortcuts
 
 | | |
