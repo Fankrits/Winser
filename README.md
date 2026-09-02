@@ -172,6 +172,13 @@ tag (`BREAKING CHANGE`/`feat!:` → major, `feat:` → minor, anything else → 
 auto-release starts from `v0.0.0` as its base - tag `v1.0.0` yourself first (see below) if you
 want the first automated release to land on a specific version instead.
 
+The `release` workflow also writes the tag into `Package.appxmanifest`'s `Identity` `Version`
+before packaging (`v1.2.3` → `1.2.3.0`), so each release is a distinct, higher MSIX package
+version than the last. Without this, every build would keep the version committed in the
+manifest, and `Add-AppxPackage` refuses to install a package that shares another package's exact
+identity (name, publisher *and* version) but not its contents - the fix for the "same identity
+... but the contents are different" (`0x80073cfb`) error if you've hit it installing an update.
+
 You can still cut or test a release by hand:
 
 ```powershell
