@@ -13,7 +13,7 @@ name: auto-tag
 # as a real tag push would, so its release-creation step still runs.
 on:
   push:
-    branches: [main]
+    branches: [Main]
 
 permissions:
   contents: write

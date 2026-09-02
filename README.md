@@ -165,7 +165,7 @@ any code change here.
 
 ### Cutting a release
 
-Every merge to `main` cuts a release automatically - `.github/workflows/auto-tag.yml` picks the
+Every merge to `Main` cuts a release automatically - `.github/workflows/auto-tag.yml` picks the
 next version from [Conventional Commits](https://www.conventionalcommits.org/) since the last
 tag (`BREAKING CHANGE`/`feat!:` → major, `feat:` → minor, anything else → patch), pushes that
 `vX.Y.Z` tag, and dispatches the `release` workflow against it. With no prior tag, the first
