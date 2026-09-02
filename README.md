@@ -195,25 +195,26 @@ artifact, it just skips creating a Release.
 
 Because the certificate above is self-signed, Windows won't trust the package until that same
 certificate is trusted on the installing machine - once per machine, not per update. Every
-release publishes three files together for exactly this reason:
+release publishes four files together for exactly this reason:
 
 | File | What it is |
 |---|---|
 | `Winser-<tag>-x64.msix` | The app |
 | `Winser-<tag>.cer` | The public half of the signing certificate (no private key - safe to hand out) |
+| `Winser.appinstaller` | Points Windows at this release's `.msix`, and registers Winser for automatic updates (see below) |
 | `install-winser.ps1` | Trusts the certificate, then installs the package |
 
-Download all three into the same folder, then right-click `install-winser.ps1` → **Run with
-PowerShell** (as Administrator) - it finds the `.cer` and `.msix` next to itself, imports the
-certificate to `Cert:\LocalMachine\TrustedPeople`, and installs the package in one step. No
-other setup needed on the machine installing it.
+Download all four into the same folder, then right-click `install-winser.ps1` → **Run with
+PowerShell** (as Administrator) - it finds the files next to itself, imports the certificate to
+`Cert:\LocalMachine\TrustedPeople`, and installs Winser in one step. No other setup needed on the
+machine installing it.
 
-If you'd rather see (or run) each step by hand instead of trusting a script, this is exactly
+If you'd rather see (or run) each step by hand instead of trusting a script, this is roughly
 what `install-winser.ps1` does:
 
 ```powershell
 Import-Certificate -FilePath WinserSigning.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
-Add-AppxPackage -Path Winser-<tag>-x64.msix
+Add-AppxPackage -AppInstallerFile Winser.appinstaller
 ```
 
 Got the "publisher certificate could not be verified" error (`0x800B010A`) from double-clicking
@@ -230,6 +231,22 @@ Once trusted, Winser installs and uninstalls like any other Windows app - Start 
 normal removal from Settings, no SmartScreen "unrecognized publisher" prompt, since that check
 is for standalone EXE/MSI downloads and MSIX installation verifies the package signature
 instead.
+
+### Automatic updates
+
+Installing through `Winser.appinstaller` (what `install-winser.ps1` does above) registers
+Winser with Windows' built-in [App Installer](https://learn.microsoft.com/windows/msix/app-installer/app-installer-file-overview)
+for automatic updates: Windows re-checks `.../releases/latest/download/Winser.appinstaller` both
+whenever Winser launches and periodically in the background, and silently installs a newer
+version the moment `auto-tag`/`release` publishes one - no re-downloading or re-running anything
+by hand. This only needs the certificate trusted once; it keeps working release after release as
+long as the same certificate keeps signing them.
+
+Installed straight from a bare `.msix` instead (`Add-AppxPackage -Path`, or any release before
+this feature existed)? That install was never registered for update checks and won't start
+auto-updating on its own - reinstall once through `Winser.appinstaller` (rerun
+`install-winser.ps1` against any release from here on) to enroll it; every release after that
+updates itself.
 
 ## Size
 

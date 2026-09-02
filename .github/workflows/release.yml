@@ -177,6 +177,49 @@ jobs:
             ${{ env.CERT_PATH }}
             packaging/install-winser.ps1
 
+      # Lets Windows keep an install of Winser itself updated, rather than requiring a fresh
+      # download and re-run of install-winser.ps1 every release. Once installed through this
+      # file (see install-winser.ps1), Windows periodically re-fetches it from its own Uri below
+      # and compares Version - a fixed filename is what keeps that Uri stable release to release
+      # (GitHub always resolves .../releases/latest/download/<name> to the newest published
+      # release's asset of that name), even though MainPackage.Uri below points at this release's
+      # own versioned, immutable .msix. Checked on every launch (HoursBetweenUpdateChecks="0")
+      # and periodically in the background regardless of launching (AutomaticBackgroundTask),
+      # both silent (ShowPrompt="false") - matches how most desktop browsers self-update. Only
+      # meaningful for a real tagged release: a workflow_dispatch dev run has no release for
+      # "latest" to resolve to.
+      - name: Generate the App Installer manifest
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $repo = "${{ github.repository }}"
+          $msixUrl = "https://github.com/$repo/releases/download/$env:RELEASE_TAG/$env:MSIX_PATH"
+          $selfUrl = "https://github.com/$repo/releases/latest/download/Winser.appinstaller"
+
+          $xml = @(
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<AppInstaller'
+            '  xmlns="http://schemas.microsoft.com/appx/appinstaller/2018"'
+            "  Version=`"$env:PACKAGE_VERSION`""
+            "  Uri=`"$selfUrl`">"
+            ''
+            '  <MainPackage'
+            '    Name="Fankrits.Winser"'
+            '    Publisher="CN=Fankrits"'
+            "    Version=`"$env:PACKAGE_VERSION`""
+            '    ProcessorArchitecture="x64"'
+            "    Uri=`"$msixUrl`" />"
+            ''
+            '  <UpdateSettings>'
+            '    <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="false" UpdateBlocksActivation="false" />'
+            '    <AutomaticBackgroundTask />'
+            '  </UpdateSettings>'
+            '</AppInstaller>'
+          ) -join "`n"
+
+          Set-Content -Path Winser.appinstaller -Value $xml -Encoding utf8
+          Write-Host "Generated Winser.appinstaller -> $msixUrl"
+
       - name: Create the GitHub release
         if: github.ref_type == 'tag'
         env:
@@ -186,5 +229,6 @@ jobs:
           "${{ env.MSIX_PATH }}"
           "${{ env.CERT_PATH }}"
           packaging/install-winser.ps1
+          Winser.appinstaller
           --title "${{ github.ref_name }}"
-          --notes "Self-signed MSIX. Download all three files (.msix, .cer, install-winser.ps1) into the same folder, then right-click install-winser.ps1 -> Run with PowerShell as Administrator - it trusts the certificate and installs the package in one step. See README.md#installing-a-release for the manual commands if you'd rather not run a script."
+          --notes "Self-signed MSIX with automatic updates. Download all four files (.msix, .cer, .appinstaller, install-winser.ps1) into the same folder, then right-click install-winser.ps1 -> Run with PowerShell as Administrator - it trusts the certificate and installs through the App Installer manifest, which also registers Winser for silent automatic updates. See README.md#installing-a-release for details, including manual commands if you'd rather not run a script."
