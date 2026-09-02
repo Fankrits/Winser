@@ -33,6 +33,40 @@ jobs:
           $tag = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}" } else { "dev-$env:GITHUB_RUN_NUMBER" }
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append
 
+      # MSIX identity comparisons are purely by-the-numbers (Name+Publisher+Architecture match,
+      # Version compared field by field) - Package.appxmanifest's Version was previously left at
+      # its committed 1.0.0.0 for every build, so every release had an identical package identity
+      # with different contents inside, which Add-AppxPackage refuses to install or upgrade
+      # (0x80073cfb: "same identity ... but the contents are different"). Deriving the identity
+      # version from the release tag instead means each release is a real, monotonically higher
+      # version Windows will actually upgrade in place. A non-tag (workflow_dispatch) run has no
+      # semver to parse, so it gets a build-only version instead - it's never installed for real,
+      # only uploaded as a workflow artifact, so it doesn't need to be a valid upgrade target.
+      - name: Compute the package identity version
+        shell: pwsh
+        run: |
+          $pkgVersion = if ("${{ github.ref_type }}" -eq "tag") {
+            $parts = @(("${{ github.ref_name }}" -replace '^v') -split '\.')
+            while ($parts.Count -lt 4) { $parts += '0' }
+            $parts[0..3] -join '.'
+          } else {
+            "0.0.0.$env:GITHUB_RUN_NUMBER"
+          }
+          "PACKAGE_VERSION=$pkgVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Set the package identity version in Package.appxmanifest
+        shell: pwsh
+        run: |
+          $manifestPath = "src/Winser/Package.appxmanifest"
+          $original = Get-Content $manifestPath -Raw
+          $updated = $original -replace '(<Identity\s[\s\S]*?)Version="[\d.]+"', "`$1Version=`"$env:PACKAGE_VERSION`""
+          if ($updated -eq $original) {
+            Write-Error "Did not find an <Identity ... Version=`"...`"/> attribute to patch in $manifestPath."
+            exit 1
+          }
+          Set-Content -Path $manifestPath -Value $updated -NoNewline
+          Write-Host "Package identity version set to $env:PACKAGE_VERSION"
+
       # Package.appxmanifest's Publisher (CN=Fankrits) must match this certificate's Subject
       # byte for byte, or signing fails. See README for the exact commands to generate one.
       - name: Check the signing certificate secrets are configured
