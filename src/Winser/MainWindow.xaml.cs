@@ -39,10 +39,40 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsPaneMargin = 8;
 
     /// <summary>
-    /// How often the cursor is checked against the zones below. Fast enough that reaching one
-    /// feels immediate, slow enough to be free: it is one GetCursorPos and two rectangle tests.
+    /// How often the cursor is checked against the zones below while it is actually moving.
+    /// Fast enough that reaching one feels immediate.
     /// </summary>
     private const int CursorPollMs = 100;
+
+    /// <summary>
+    /// The rate once the cursor has held still for <see cref="CursorRestingAfterMs"/>, and the
+    /// slower one once it has held still for <see cref="CursorIdleAfterMs"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The work per tick really is trivial - one GetCursorPos and two rectangle tests - but that
+    /// was never the cost worth counting. A precise 10 Hz timer is 600 thread wake-ups a minute
+    /// that Windows cannot coalesce, and it holds the CPU package out of its deeper sleep states
+    /// for as long as a window is open, whether or not anyone is at the machine. That is charged
+    /// to battery even though it barely registers as CPU time.
+    /// </para>
+    /// <para>
+    /// A cursor that is not moving cannot be approaching a zone, which makes stillness a safe
+    /// thing to back off on - and stillness is exactly the state a laptop left alone is in. The
+    /// backing off costs nothing in feel because the tick that notices movement drops straight
+    /// back to <see cref="CursorPollMs"/> and evaluates both zones on that same tick, so a hand
+    /// travelling to a screen edge - which takes a few hundred milliseconds of continuous motion -
+    /// is caught in flight rather than on arrival.
+    /// </para>
+    /// </remarks>
+    private const int RestingCursorPollMs = 500;
+
+    private const int IdleCursorPollMs = 2000;
+
+    /// <summary>How long the cursor must hold still before each slower rate takes over.</summary>
+    private const int CursorRestingAfterMs = 3_000;
+
+    private const int CursorIdleAfterMs = 15_000;
 
     /// <summary>
     /// How far around the caption buttons the pointer counts as being at them, in pixels at 100%
@@ -77,6 +107,14 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     /// <summary>The one cursor poll both hover behaviours share; see the cursor watch section.</summary>
     private DispatcherTimer? _cursorWatchTimer;
+
+    /// <summary>Where the cursor was on the previous tick, for deciding whether it has moved.</summary>
+    private POINT _lastCursorPoint;
+
+    private long _cursorMovedAtTicks;
+
+    /// <summary>The interval currently on <see cref="_cursorWatchTimer"/>, to avoid restarting it.</summary>
+    private int _cursorPollMs = CursorPollMs;
 
     private bool _pointerOverVerticalTabsCard;
 
@@ -221,6 +259,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
     }
 
+    /// <summary>Whether this window is currently minimized. Read by <see cref="WindowManager"/>.</summary>
+    internal bool IsMinimized => _isMinimized;
+
     /// <summary>
     /// Re-evaluates from both signals together rather than reacting to each in isolation:
     /// minimizing normally deactivates the window too, and handling them independently would
@@ -234,6 +275,13 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         _isMinimized = minimized;
         UpdateCursorWatch();
+
+        // Deliberately driven by the minimized half of that signal alone, not by
+        // "minimized or deactivated" as the line above is. A window that has merely lost focus
+        // is still on screen and still has to paint - a video, an animation, a page finishing
+        // its load - and scheduling the process for efficiency there would be visible
+        // sluggishness in exchange for nothing. Only a window nobody can see is free.
+        WindowManager.UpdateProcessPowerState();
     }
 
     private void OnClosed(object sender, WindowEventArgs args)
@@ -534,19 +582,79 @@ public sealed partial class MainWindow : Window, IShellWindow
         // could otherwise use to starve the tick indefinitely.
         if (!_cursorWatchTimer.IsEnabled)
         {
+            // Whatever changed the window's shape may well have been the user, so come back at
+            // full rate and let stillness earn the slower one again.
+            _cursorMovedAtTicks = Environment.TickCount64;
+            SetCursorPollRate(CursorPollMs);
             _cursorWatchTimer.Start();
         }
     }
 
     private DispatcherTimer CreateCursorWatchTimer()
     {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CursorPollMs) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(_cursorPollMs) };
         timer.Tick += (_, _) =>
         {
+            // Both zones are evaluated on every tick whatever the rate, so backing off changes
+            // only how soon a change is noticed - never whether it is.
             UpdateVerticalTabsHover();
             UpdateCaptionReveal();
+            AdjustCursorPollRate();
         };
         return timer;
+    }
+
+    /// <summary>
+    /// Slows the poll down while the cursor holds still, and restores it the moment it moves.
+    /// </summary>
+    private void AdjustCursorPollRate()
+    {
+        if (GetCursorPos(out var cursor))
+        {
+            if (cursor.X != _lastCursorPoint.X || cursor.Y != _lastCursorPoint.Y)
+            {
+                _lastCursorPoint = cursor;
+                _cursorMovedAtTicks = Environment.TickCount64;
+            }
+        }
+        else
+        {
+            // No answer is not evidence of stillness; treat it as movement and stay responsive.
+            _cursorMovedAtTicks = Environment.TickCount64;
+        }
+
+        // A zone that is currently open is being pointed at right now, and leaving it has to
+        // feel as prompt as reaching it did.
+        if (_isCaptionRevealed || ViewModel.IsVerticalTabsPointerOver)
+        {
+            SetCursorPollRate(CursorPollMs);
+            return;
+        }
+
+        var still = Environment.TickCount64 - _cursorMovedAtTicks;
+        SetCursorPollRate(
+            still >= CursorIdleAfterMs ? IdleCursorPollMs
+            : still >= CursorRestingAfterMs ? RestingCursorPollMs
+            : CursorPollMs);
+    }
+
+    /// <summary>
+    /// Changes the tick rate, and only when it actually differs: assigning
+    /// <see cref="DispatcherTimer.Interval"/> restarts the timer, so writing the value it
+    /// already holds on every tick would push the next tick out forever.
+    /// </summary>
+    private void SetCursorPollRate(int milliseconds)
+    {
+        if (_cursorPollMs == milliseconds)
+        {
+            return;
+        }
+
+        _cursorPollMs = milliseconds;
+        if (_cursorWatchTimer is { } timer)
+        {
+            timer.Interval = TimeSpan.FromMilliseconds(milliseconds);
+        }
     }
 
     /// <summary>
@@ -769,7 +877,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         tab.IsAddressFocused = false;
-        tab.Suggestions.Clear();
+        tab.ClearSuggestions();
         tab.FocusWebContent();
     }
 

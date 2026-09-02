@@ -350,13 +350,28 @@
     </Grid>
 
     <!--  =========================== bookmarks bar ===========================  -->
+    <!--
+      x:Load rather than Visibility, and the difference is per tab rather than per window. This
+      Border is inside TabView's item template, so there is one of it for every open tab, and
+      the two ItemsControls below it do not virtualize - a collapsed bookmarks bar was still
+      building a Button per bookmark, per tab, and holding them for as long as the tab lived.
+      Twenty tabs and thirty bookmarks is six hundred button visual trees for one window's worth
+      of bookmarks bar. Deferred, a tab that never shows one never builds one, and turning the
+      bar off in settings genuinely reclaims them rather than only hiding them.
+
+      Safe against the null-ViewModel evaluation that made x:Load the wrong choice for
+      WebContentView below: this Border has nothing to initialise wrongly and no code-behind
+      reference to go null, so the worst a false first pass does is defer the load until
+      Bindings.Update() runs - which is exactly what the native panes below already rely on.
+    -->
     <Border
+      x:Name="BookmarksBar"
       Grid.Row="1"
       Padding="8,3"
       Background="{ThemeResource WinserChromeBrush}"
       BorderBrush="{ThemeResource WinserChromeBorderBrush}"
       BorderThickness="0,0,0,1"
-      Visibility="{x:Bind ViewModel.Shell.IsBookmarksBarVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+      x:Load="{x:Bind ViewModel.Shell.IsBookmarksBarVisible, Mode=OneWay}">
       <ScrollViewer
         HorizontalScrollBarVisibility="Hidden"
         HorizontalScrollMode="Auto"
@@ -438,10 +453,18 @@
     </Border>
 
     <!--  ============================= load state ============================  -->
+    <!--
+      IsIndeterminate is bound rather than hardcoded true, and that is a power fix rather than
+      a tidy-up. An indeterminate ProgressBar runs a continuous composition animation, and
+      collapsing it only stops it being drawn - the storyboard keeps running, which keeps the
+      compositor waking every frame and holds the display pipeline out of its idle state for
+      as long as the tab exists. Bound, the animation is torn down when loading finishes
+      instead of merely hidden. Visibility stays: it is what reserves no space in the layout.
+    -->
     <ProgressBar
       Grid.Row="2"
       Height="2"
-      IsIndeterminate="True"
+      IsIndeterminate="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
       Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
 
     <!--  ============================== content ==============================  -->

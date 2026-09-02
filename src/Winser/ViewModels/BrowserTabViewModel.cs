@@ -21,12 +21,24 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     private static readonly double[] ZoomLadder =
         [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0, 5.0];
 
+    /// <summary>
+    /// How long the idle sweep leaves a tab alone after it refused to be discarded because the
+    /// page looked like it held typed input. Without it, such a tab is asked again on every
+    /// sweep, forever - and asking means running <see cref="Scripts.HasUnsavedFormInput"/>
+    /// inside a renderer that is frozen, so the check to save power was itself waking the
+    /// process it had just put to sleep. The tab is already long past the idle threshold by
+    /// then, so re-asking promptly buys nothing: nobody is there to have submitted the form.
+    /// </summary>
+    private static readonly TimeSpan DiscardRefusalBackoff = TimeSpan.FromMinutes(5);
+
     private static FontFamily? _symbolFont;
 
     private readonly BrowserViewModel _shell;
 
     private IWebViewHost? _host;
     private bool _syncingZoom;
+    private DispatcherTimer? _suggestionTimer;
+    private string? _pendingSuggestionQuery;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsWeb), nameof(IsSettings), nameof(IsHistory))]
@@ -169,6 +181,21 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     /// </summary>
     public DateTimeOffset LastActiveUtc { get; private set; }
 
+    /// <summary>
+    /// Until this moment the idle sweep skips this tab entirely. Set when a discard is refused
+    /// for a reason that cost a round-trip into the page; cleared by <see cref="MarkActive"/>,
+    /// since a tab the user has looked at again starts its clock over regardless.
+    /// </summary>
+    public DateTimeOffset DiscardRetryAfterUtc { get; private set; }
+
+    /// <summary>
+    /// Whether discarding this tab could free anything, judged without touching the page at
+    /// all. These are exactly <see cref="TryDiscardAsync"/>'s three free checks, split out so
+    /// the sweep can rule a tab out - and decide whether to arm its timer at all - without
+    /// paying for the script round-trip that decides the rest.
+    /// </summary>
+    public bool IsDiscardable => IsWeb && !IsAudioPlaying && _host is { IsReady: true };
+
     public ObservableCollection<AddressSuggestion> Suggestions { get; } = [];
 
     /// <summary>Set by the view while the address box has keyboard focus.</summary>
@@ -272,12 +299,19 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         }
 
         host.SyncFullScreenFlag(_shell.IsFullScreen);
+
+        // IsDiscardable just became true, which can bring this window's next sweep forward.
+        _shell.RescheduleIdleSweep();
     }
 
     public void DetachHost()
     {
         _host?.Release();
         _host = null;
+        _shell.RescheduleIdleSweep();
+
+        // A tab closed mid-typing must not leave a rebuild armed behind it.
+        _suggestionTimer?.Stop();
 
         // A tab that goes away mid-prompt (closed, window torn down) must still resolve every
         // deferral WebView2 is holding open, or those CoreWebView2 events never complete.
@@ -344,7 +378,12 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     public void RequestAddressFocus() => AddressFocusRequested?.Invoke(this, EventArgs.Empty);
 
-    public void MarkActive() => LastActiveUtc = DateTimeOffset.UtcNow;
+    public void MarkActive()
+    {
+        LastActiveUtc = DateTimeOffset.UtcNow;
+        DiscardRetryAfterUtc = default;
+        _shell.RescheduleIdleSweep();
+    }
 
     /// <summary>
     /// Frees this tab's renderer entirely rather than just freezing it (see
@@ -375,11 +414,15 @@ public sealed partial class BrowserTabViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
         {
+            // Whatever made the call fail is unlikely to have resolved itself by the next
+            // sweep, so this backs off for the same reason a refusal does.
+            DiscardRetryAfterUtc = DateTimeOffset.UtcNow + DiscardRefusalBackoff;
             return false;
         }
 
         if (hasInput == "true")
         {
+            DiscardRetryAfterUtc = DateTimeOffset.UtcNow + DiscardRefusalBackoff;
             return false;
         }
 
@@ -510,6 +553,10 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     {
         IsAudioPlaying = playing;
         IsMuted = muted;
+
+        // A tab that started or stopped making noise has just moved in or out of the sweep's
+        // candidate set, so the next deadline is no longer the one already scheduled.
+        _shell.RescheduleIdleSweep();
     }
 
     // -------------------------------------------------------------------- commands
@@ -643,8 +690,56 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     // --------------------------------------------------------------- address bar
 
-    /// <summary>Rebuilds the address bar dropdown for the text the user has typed so far.</summary>
+    /// <summary>
+    /// How long the address bar waits after a keystroke before rebuilding its suggestions.
+    /// Below the threshold where a dropdown feels like it lags the typing, and above the gap
+    /// between characters of anyone typing a word.
+    /// </summary>
+    private static readonly TimeSpan SuggestionDebounce = TimeSpan.FromMilliseconds(120);
+
+    /// <summary>
+    /// Queues a rebuild of the address bar dropdown for the text typed so far.
+    /// </summary>
+    /// <remarks>
+    /// Debounced because the rebuild is not cheap and was running once per character: it scans
+    /// history, ranks up to two hundred candidates, then clears and refills an
+    /// ObservableCollection - which makes the dropdown discard and rebuild its whole item list
+    /// every keystroke. Restarting the timer on each character means a word typed at speed costs
+    /// one pass instead of one per letter.
+    /// </remarks>
     public void UpdateSuggestions(string? query)
+    {
+        _pendingSuggestionQuery = query;
+
+        if (_suggestionTimer is null)
+        {
+            _suggestionTimer = new DispatcherTimer { Interval = SuggestionDebounce };
+            _suggestionTimer.Tick += OnSuggestionTimerTick;
+        }
+
+        _suggestionTimer.Stop();
+        _suggestionTimer.Start();
+    }
+
+    /// <summary>
+    /// Empties the dropdown and abandons any rebuild still pending, so a suggestion pass queued
+    /// by the last keystroke cannot repopulate the list after the address has been submitted.
+    /// </summary>
+    public void ClearSuggestions()
+    {
+        _suggestionTimer?.Stop();
+        _pendingSuggestionQuery = null;
+        Suggestions.Clear();
+    }
+
+    private void OnSuggestionTimerTick(object? sender, object e)
+    {
+        _suggestionTimer?.Stop();
+        BuildSuggestions(_pendingSuggestionQuery);
+    }
+
+    /// <summary>Rebuilds the address bar dropdown for the text the user has typed so far.</summary>
+    private void BuildSuggestions(string? query)
     {
         Suggestions.Clear();
 
