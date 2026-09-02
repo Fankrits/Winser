@@ -165,6 +165,15 @@ any code change here.
 
 ### Cutting a release
 
+Every merge to `main` cuts a release automatically - `.github/workflows/auto-tag.yml` picks the
+next version from [Conventional Commits](https://www.conventionalcommits.org/) since the last
+tag (`BREAKING CHANGE`/`feat!:` → major, `feat:` → minor, anything else → patch), pushes that
+`vX.Y.Z` tag, and dispatches the `release` workflow against it. With no prior tag, the first
+auto-release starts from `v0.0.0` as its base - tag `v1.0.0` yourself first (see below) if you
+want the first automated release to land on a specific version instead.
+
+You can still cut or test a release by hand:
+
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
