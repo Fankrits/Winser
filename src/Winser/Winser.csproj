@@ -81,7 +81,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- Microsoft.Web.WebView2 comes in transitively with the Windows App SDK, which
          pins the loader version its WebView2 XAML control expects. Do not pin it here. -->
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2957" />
 
     <!--
       The Microsoft.WindowsAppSDK meta-package pulls in nine sub-packages; Winser needs five
@@ -95,12 +95,12 @@
       empty, just two ProjectCapability markers), Runtime's targets set up the AppX/component
       references WindowsAppSDKSelfContained relies on to bundle the native runtime.
     -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="2.0.4" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.9" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.6" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.6" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="2.1.0" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.4.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="2.6.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.6.4" />
   </ItemGroup>
 
 </Project>
