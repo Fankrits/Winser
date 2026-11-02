@@ -146,6 +146,7 @@
               </StackPanel>
               <ComboBox
                 Grid.Column="1"
+                AutomationProperties.Name="Theme"
                 MinWidth="200"
                 ItemsSource="{x:Bind ViewModel.ThemeOptions}"
                 SelectedIndex="{x:Bind ViewModel.ThemeIndex, Mode=TwoWay}"
@@ -165,6 +166,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Show the bookmarks bar"
                 IsOn="{x:Bind ViewModel.ShowBookmarksBar, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -184,6 +186,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Show tabs on the side"
                 IsOn="{x:Bind ViewModel.UseVerticalTabs, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -203,6 +206,7 @@
               </StackPanel>
               <NumberBox
                 Grid.Column="1"
+                AutomationProperties.Name="Default page zoom"
                 Width="140"
                 LargeChange="25"
                 Maximum="500"
@@ -228,6 +232,7 @@
               <TextBlock Text="When Winser opens" TextWrapping="Wrap" VerticalAlignment="Center" />
               <ComboBox
                 Grid.Column="1"
+                AutomationProperties.Name="When Winser opens"
                 MinWidth="240"
                 ItemsSource="{x:Bind ViewModel.StartupOptions}"
                 SelectedIndex="{x:Bind ViewModel.StartupIndex, Mode=TwoWay}"
@@ -244,6 +249,7 @@
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBox
+                  AutomationProperties.Name="Home page"
                   PlaceholderText="https://example.com"
                   Text="{x:Bind ViewModel.HomePage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                 <Button
@@ -271,6 +277,7 @@
               </StackPanel>
               <ComboBox
                 Grid.Column="1"
+                AutomationProperties.Name="Search engine used in the address bar"
                 MinWidth="200"
                 DisplayMemberPath="Name"
                 ItemsSource="{x:Bind ViewModel.SearchEngines}"
@@ -296,6 +303,7 @@
               </StackPanel>
               <ComboBox
                 Grid.Column="1"
+                AutomationProperties.Name="Tracking prevention"
                 MinWidth="200"
                 ItemsSource="{x:Bind ViewModel.TrackingOptions}"
                 SelectedIndex="{x:Bind ViewModel.TrackingIndex, Mode=TwoWay}"
@@ -315,6 +323,7 @@
               </StackPanel>
               <NumberBox
                 Grid.Column="1"
+                AutomationProperties.Name="Keep history for"
                 Width="140"
                 Maximum="3650"
                 Minimum="0"
@@ -333,6 +342,7 @@
               <TextBlock Text="Clear browsing history when Winser closes" TextWrapping="Wrap" VerticalAlignment="Center" />
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Clear browsing history when Winser closes"
                 IsOn="{x:Bind ViewModel.ClearHistoryOnExit, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -371,7 +381,10 @@
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox IsReadOnly="True" Text="{x:Bind ViewModel.DownloadFolder, Mode=OneWay}" />
+                <TextBox
+                  AutomationProperties.Name="Save files to"
+                  IsReadOnly="True"
+                  Text="{x:Bind ViewModel.DownloadFolder, Mode=OneWay}" />
                 <Button Grid.Column="1" Click="OnChooseDownloadFolder" Content="Change" />
               </Grid>
             </StackPanel>
@@ -386,6 +399,7 @@
               <TextBlock Text="Ask where to save each file" TextWrapping="Wrap" VerticalAlignment="Center" />
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Ask where to save each file"
                 IsOn="{x:Bind ViewModel.AskWhereToSaveDownloads, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -410,6 +424,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Open pop-up windows as tabs"
                 IsOn="{x:Bind ViewModel.OpenPopupsAsTabs, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -433,6 +448,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Sleep background tabs"
                 IsOn="{x:Bind ViewModel.SleepBackgroundTabs, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -456,6 +472,7 @@
               </StackPanel>
               <NumberBox
                 Grid.Column="1"
+                AutomationProperties.Name="Discard idle background tabs after"
                 Width="140"
                 Maximum="1440"
                 Minimum="0"
@@ -477,6 +494,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Run JavaScript"
                 IsOn="{x:Bind ViewModel.EnableJavaScript, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -496,6 +514,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Enable developer tools"
                 IsOn="{x:Bind ViewModel.EnableDevTools, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
@@ -515,6 +534,7 @@
               </StackPanel>
               <ToggleSwitch
                 Grid.Column="1"
+                AutomationProperties.Name="Save and suggest form data"
                 IsOn="{x:Bind ViewModel.EnableAutofill, Mode=TwoWay}"
                 OffContent=""
                 OnContent=""
