@@ -115,8 +115,13 @@ public static class WinserSmokeNative {
     $listener.Start()
     $port = ([Net.IPEndPoint] $listener.LocalEndpoint).Port
     $listener.Stop()
-    $bun = (Get-Command bun.exe -ErrorAction Stop | Select-Object -First 1).Source
-    if (-not $bun) { throw 'A direct bun.exe installation is required for the UI smoke server.' }
+    $bunShim = (Get-Command bun.exe -ErrorAction Stop | Select-Object -First 1).Source
+    if (-not $bunShim) { throw 'A direct bun.exe installation is required for the UI smoke server.' }
+    $bunRuntime = (& $bunShim -e 'console.log(process.execPath)' | Select-Object -Last 1).Trim()
+    if (-not $bunRuntime -or -not (Test-Path -LiteralPath $bunRuntime)) {
+        throw "Could not resolve Bun's real runtime executable from $bunShim."
+    }
+    $bun = [IO.Path]::GetFullPath($bunRuntime)
     $htmlPath = Join-Path $serverRoot 'index.html'
     $serverScript = Join-Path $serverRoot 'server.js'
     @'
@@ -134,6 +139,11 @@ Bun.serve({
 });
 '@ | Set-Content -LiteralPath $serverScript -Encoding utf8
     $serverProcess = Start-Process -FilePath $bun -ArgumentList @($serverScript, "$port", $htmlPath) -PassThru -WindowStyle Hidden
+    $serverInfo = Get-CimInstance Win32_Process -Filter "ProcessId=$($serverProcess.Id)" -ErrorAction SilentlyContinue
+    if ($null -eq $serverInfo -or $serverInfo.Name -ne 'bun.exe' -or
+        $serverInfo.CommandLine -notlike "*$serverScript*") {
+        throw "Bun did not start the expected isolated fixture script: $($serverInfo.CommandLine)"
+    }
     $url = "http://127.0.0.1:$port/"
     Start-Sleep -Milliseconds 500
     $serverProcess.Refresh()
@@ -608,7 +618,12 @@ finally {
         if (-not $app.WaitForExit(10000)) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
     }
     if ($null -ne $serverProcess -and -not $serverProcess.HasExited) {
-        Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+        $serverInfo = Get-CimInstance Win32_Process -Filter "ProcessId=$($serverProcess.Id)" -ErrorAction SilentlyContinue
+        if ($null -ne $serverInfo -and $serverInfo.Name -eq 'bun.exe' -and
+            $serverInfo.CommandLine -like "*$serverScript*") {
+            Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        else { Write-Warning "Left Bun PID $($serverProcess.Id) running because it did not match this smoke's fixture script." }
     }
     if (-not $KeepProfile) {
         $deletePath = [IO.Path]::GetFullPath($profileRoot)
