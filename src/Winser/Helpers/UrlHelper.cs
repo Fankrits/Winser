@@ -260,7 +260,7 @@ public static partial class UrlHelper
     private static bool IsValidNavigableUri(Uri uri) =>
         (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
          !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
-        (!string.IsNullOrEmpty(uri.Host) && string.IsNullOrEmpty(uri.UserInfo));
+        !string.IsNullOrEmpty(uri.Host);
 
     private static bool IsLoopbackHost(Uri uri) =>
         uri.IsLoopback || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase);
