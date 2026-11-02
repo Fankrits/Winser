@@ -45,8 +45,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 32px 24px 72px;
+    justify-content: flex-start;
+    padding: 32px 24px 18px;
     -webkit-user-select: none;
     user-select: none;
   }
@@ -55,7 +55,7 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    margin-bottom: 28px;
+    margin: auto 0 28px;
   }
 
   .brand h1 {
@@ -173,10 +173,11 @@
   }
 
   .links {
-    position: fixed;
-    bottom: 18px;
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
+    justify-content: center;
+    margin-top: auto;
   }
 
   .links button {
@@ -192,19 +193,6 @@
 
   .links button:hover { background: var(--card-hover); color: var(--fg); }
 
-  @media (max-height: 640px) {
-    body {
-      justify-content: flex-start;
-      padding: 20px 16px 24px;
-    }
-
-    .links {
-      position: static;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-top: 24px;
-    }
-  }
 </style>
 </head>
 <body>
