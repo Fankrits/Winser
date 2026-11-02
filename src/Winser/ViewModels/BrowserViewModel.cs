@@ -190,6 +190,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     partial void OnSelectedTabChanged(BrowserTabViewModel? value)
     {
         RescheduleIdleSweep();
+        _window?.RefreshTabChrome();
     }
 
     /// <summary>A download starting or finishing gates the whole sweep; see NextDiscardDueUtc.</summary>

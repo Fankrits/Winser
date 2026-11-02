@@ -184,7 +184,23 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
     }
 
-    public void RefreshTabChrome() => UpdateChromeLayout();
+    public void RefreshTabChrome()
+    {
+        if (ViewModel.UseVerticalTabs)
+        {
+            var addressFocused = IsFocusWithin(TopAddressBox);
+            foreach (var tab in ViewModel.Tabs)
+            {
+                tab.IsAddressFocused = ReferenceEquals(tab, ViewModel.SelectedTab) && addressFocused;
+                if (!ReferenceEquals(tab, ViewModel.SelectedTab))
+                {
+                    tab.ClearSuggestions();
+                }
+            }
+        }
+
+        UpdateChromeLayout();
+    }
 
     public void FocusAddressBar()
     {
@@ -917,7 +933,12 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private bool IsFocusWithin(DependencyObject element)
     {
-        for (var focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot) as DependencyObject;
+        if (RootGrid.XamlRoot is not { } xamlRoot)
+        {
+            return false;
+        }
+
+        for (var focused = FocusManager.GetFocusedElement(xamlRoot) as DependencyObject;
              focused is not null;
              focused = VisualTreeHelper.GetParent(focused))
         {
