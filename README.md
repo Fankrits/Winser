@@ -130,6 +130,13 @@ Run the URL resolution checks with the .NET 10 SDK:
 dotnet run --project tests/UrlHelperChecks/UrlHelperChecks.csproj
 ```
 
+After building Winser, run the settings selector checks against the built app assembly:
+
+```powershell
+dotnet run --project tests/SettingsViewModelChecks/SettingsViewModelChecks.csproj -- `
+  .\src\Winser\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Winser.dll
+```
+
 After building the app, run the native Windows UI smoke check with Windows PowerShell and a
 direct Bun installation (`bun.exe` available on `PATH`):
 
