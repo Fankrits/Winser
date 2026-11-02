@@ -33,13 +33,14 @@
   * { box-sizing: border-box; }
 
   html, body {
-    height: 100%;
+    min-height: 100%;
     margin: 0;
   }
 
   body {
     background: var(--bg);
     color: var(--fg);
+    min-height: 100vh;
     font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
     display: flex;
     flex-direction: column;
@@ -118,6 +119,8 @@
     gap: 10px;
   }
 
+  .tiles[hidden] { display: none; }
+
   .tile {
     display: flex;
     flex-direction: column;
@@ -183,6 +186,20 @@
   }
 
   .links button:hover { background: var(--card-hover); color: var(--fg); }
+
+  @media (max-height: 640px) {
+    body {
+      justify-content: flex-start;
+      padding: 20px 16px 24px;
+    }
+
+    .links {
+      position: static;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 24px;
+    }
+  }
 </style>
 </head>
 <body>
