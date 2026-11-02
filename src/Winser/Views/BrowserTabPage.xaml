@@ -444,26 +444,39 @@
         Margin="0,10,18,0"
         Padding="8,6"
         HorizontalAlignment="Right"
+        MaxWidth="480"
         VerticalAlignment="Top"
         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1"
         CornerRadius="8"
         x:Load="{x:Bind ViewModel.IsFindOpen, Mode=OneWay}">
-        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <Grid ColumnSpacing="6" VerticalAlignment="Center">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
           <TextBox
             x:Name="FindBox"
-            Width="220"
+            AutomationProperties.Name="Find on page"
+            MaxWidth="220"
+            MinWidth="0"
             KeyDown="OnFindBoxKeyDown"
             PlaceholderText="Find on page"
             Text="{x:Bind ViewModel.FindQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
           <TextBlock
+            Grid.Column="1"
             MinWidth="56"
             Opacity="0.7"
             Style="{StaticResource CaptionTextBlockStyle}"
             Text="{x:Bind ViewModel.FindStatus, Mode=OneWay}"
             VerticalAlignment="Center" />
           <ToggleButton
+            Grid.Column="2"
             AutomationProperties.Name="Match case"
             Content="Aa"
             FontFamily="{ThemeResource ContentControlThemeFontFamily}"
@@ -472,24 +485,27 @@
             Style="{StaticResource ToolbarToggleButtonStyle}"
             ToolTipService.ToolTip="Match case" />
           <Button
+            Grid.Column="3"
             AutomationProperties.Name="Previous match"
             Command="{x:Bind ViewModel.FindPreviousCommand}"
             Content="&#xE70E;"
             Style="{StaticResource ToolbarIconButtonStyle}"
             ToolTipService.ToolTip="Previous match (Shift+Enter)" />
           <Button
+            Grid.Column="4"
             AutomationProperties.Name="Next match"
             Command="{x:Bind ViewModel.FindNextCommand}"
             Content="&#xE70D;"
             Style="{StaticResource ToolbarIconButtonStyle}"
             ToolTipService.ToolTip="Next match (Enter)" />
           <Button
+            Grid.Column="5"
             AutomationProperties.Name="Close find"
             Command="{x:Bind ViewModel.CloseFindCommand}"
             Content="&#xE711;"
             Style="{StaticResource ToolbarIconButtonStyle}"
             ToolTipService.ToolTip="Close (Esc)" />
-        </StackPanel>
+        </Grid>
       </Border>
 
       <!--  Link preview, bottom-left, the way browsers have always done it.  -->
