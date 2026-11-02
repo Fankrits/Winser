@@ -17,6 +17,16 @@
           <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE727;" /></MenuFlyoutItem.Icon>
         </MenuFlyoutItem>
         <MenuFlyoutSeparator />
+        <MenuFlyoutItem Command="{x:Bind Tab.GoHomeCommand}" KeyboardAcceleratorTextOverride="Alt+Home" Text="Home" />
+        <MenuFlyoutItem
+          Command="{x:Bind Tab.ToggleBookmarkCommand}"
+          KeyboardAcceleratorTextOverride="Ctrl+D"
+          Text="{x:Bind Tab.BookmarkTooltip, Mode=OneWay}" />
+        <MenuFlyoutItem
+          Command="{x:Bind Tab.ToggleMuteCommand}"
+          Text="{x:Bind Tab.MuteTooltip, Mode=OneWay}"
+          Visibility="{x:Bind Tab.IsAudioPlaying, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+        <MenuFlyoutSeparator />
         <MenuFlyoutItem Command="{x:Bind Tab.ZoomInCommand}" KeyboardAcceleratorTextOverride="Ctrl++" Text="Zoom in" />
         <MenuFlyoutItem Command="{x:Bind Tab.ZoomOutCommand}" KeyboardAcceleratorTextOverride="Ctrl+-" Text="Zoom out" />
         <MenuFlyoutItem Command="{x:Bind Tab.ResetZoomCommand}" Text="{x:Bind Tab.ZoomLabel, Mode=OneWay}" />

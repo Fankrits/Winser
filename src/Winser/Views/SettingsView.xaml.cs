@@ -32,11 +32,11 @@ public sealed partial class SettingsView : UserControl
         {
             ViewModel.SelectedSection = item.Section;
             var selectedIndex = (sender as ListView)?.SelectedIndex ?? -1;
-            if (sender == SectionList && CompactSectionList.SelectedIndex != selectedIndex)
+            if (ReferenceEquals(sender, SectionList) && CompactSectionList.SelectedIndex != selectedIndex)
             {
                 CompactSectionList.SelectedIndex = selectedIndex;
             }
-            else if (sender == CompactSectionList && SectionList.SelectedIndex != selectedIndex)
+            else if (ReferenceEquals(sender, CompactSectionList) && SectionList.SelectedIndex != selectedIndex)
             {
                 SectionList.SelectedIndex = selectedIndex;
             }
