@@ -87,6 +87,11 @@
     user-select: text;
   }
 
+  input[type="search"]::placeholder {
+    color: var(--muted);
+    opacity: 1;
+  }
+
   input[type="search"]:focus {
     border-color: var(--accent);
     box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
