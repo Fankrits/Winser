@@ -26,7 +26,8 @@
   <!--
     Transparent, not unset: lets Mica show through while keeping the whole window hit-testable.
 
-    One cell, no columns and no rows: the page fills the window edge to edge in both modes. An
+    A zero-height row for the vertical-tabs toolbar and a content row: the page fills the window
+    edge to edge in both modes. The first row grows only when vertical tabs are active. An
     earlier vertical-tabs layout reserved a left column - first tracking the pane's full width so
     the page shifted aside when it opened, later just the hover-zone width - and either way that
     column was visible as a band of window background down the left of every page. Nothing
@@ -34,13 +35,14 @@
     the page, and the hover trigger is the cursor's own position rather than an element needing
     room to sit in (see MainWindow.xaml.cs).
 
-    TabStrip deliberately has no Grid.Row either - it must stay anchored at y=0 in both modes,
-    since that is what lets a negative top margin (see MainWindow.xaml.cs, UpdateChromeLayout)
-    push the native strip fully off-screen above the window rather than just far enough to clear a
-    reserved row; the vertical mode drag region is a same-origin overlay, not a second row, for
-    the same y=0 reason - see its own comment below.
+    TabStrip stays at the top of the content row. In vertical mode its negative top margin moves
+    the native strip behind the toolbar row while the selected page begins below that row.
   -->
   <Grid x:Name="RootGrid" Background="Transparent">
+    <Grid.RowDefinitions>
+      <RowDefinition x:Name="VerticalToolbarRow" Height="0" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
 
     <!--
       VerticalAlignment is load-bearing, not cosmetic. TabView's own default style sets
@@ -56,6 +58,7 @@
     -->
     <TabView
       x:Name="TabStrip"
+      Grid.Row="1"
       CanDragTabs="True"
       CanReorderTabs="True"
       IsAddTabButtonVisible="True"
@@ -141,18 +144,13 @@
       Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
       clearance, since TabStrip's own footer is inside its (now hidden) native strip.
 
-      An overlay (Top-aligned, Height set from code to match TabStripHeight), not a reserved
-      Grid row: TabStrip has to keep its cell anchored at y=0 for the strip-hiding trick below
-      to work at all, so there is no row left over here to occupy - "content starts at y=40"
-      and "the native strip is fully off-screen above y=0" are not simultaneously satisfiable
-      once TabStrip's own cell has been pushed down to y=40 by a reserved row, because the
-      strip and the content it hides above are one contiguous block inside TabView's template.
-      Overlaying instead of reserving space means this bar tints whatever content is directly
-      under it rather than displacing it - the same trade Windows 11 itself makes when content
-      scrolls under an extended, Mica-tinted title bar.
+      This drag region occupies the reserved toolbar row in vertical-tabs mode. TabStrip's
+      negative top margin moves its native strip behind this row while its page content begins
+      below the toolbar.
     -->
     <Grid
       x:Name="VerticalModeDragRegion"
+      Grid.Row="0"
       VerticalAlignment="Top"
       Background="Transparent"
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}">
@@ -164,11 +162,7 @@
         rather than unset on the Grid for the usual reason - an unset Background is not
         hit-testable, and this one has to be.
 
-        Opacity is driven from MainWindow.ApplyCaptionReveal, along with the caption buttons
-        this bar exists to make room for: page-first at rest, chrome when the pointer goes
-        looking for it. The transition is short and only on this half of the pair - the buttons
-        come back by the title bar being given its height again, which is not something there is
-        any way to animate; a slower fade here would leave them hanging over an empty bar.
+        Opacity is driven from MainWindow.ApplyCaptionReveal with the system caption buttons.
       -->
       <Border x:Name="TopChromeTint" Background="{ThemeResource WinserChromeBrush}" Opacity="0">
         <Border.OpacityTransition>

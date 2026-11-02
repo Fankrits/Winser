@@ -432,6 +432,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         // The browser bar stays visible during normal browsing; fullscreen is the only state
         // that removes the title bar and its controls.
         SetCaptionRevealed(!ViewModel.IsFullScreen);
+        VerticalToolbarRow.Height = new GridLength(vertical ? TopActionBarGrid.Height : 0);
 
         // Nothing reserves layout space for vertical tabs: the expanded pane is a windowed Popup
         // floating over the page, and the hover trigger is the cursor's position rather than an
