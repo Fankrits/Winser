@@ -81,17 +81,6 @@ public sealed partial class BrowserViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsPointerOver { get; set; }
 
-    /// <summary>
-    /// True while the vertical pane's own address bar has focus. Folded into
-    /// <see cref="IsVerticalTabsExpanded"/> so the pane stays open across a hover ending
-    /// mid-edit, and so Ctrl+L can reach an address bar that starts out fully collapsed:
-    /// focusing it needs it visible first, and hovering is not itself a keyboard-reachable action.
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
-    public partial bool IsVerticalTabsAddressBarFocused { get; set; }
-
     [ObservableProperty]
     public partial bool HasActiveDownloads { get; set; }
 
@@ -147,8 +136,8 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// </summary>
     public bool IsToolbarVisible => !IsFullScreen && !UseVerticalTabs;
 
-    /// <summary>Pinned open, actively being peeked at via hover, or its address bar has focus.</summary>
-    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver || IsVerticalTabsAddressBarFocused;
+    /// <summary>Pinned open or actively being peeked at via hover.</summary>
+    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver;
 
     /// <summary>
     /// Whether the pane's actual chrome - background, header, nav row, address bar, tab list -
@@ -207,15 +196,12 @@ public sealed partial class BrowserViewModel : ObservableObject
     // whether the native strip is hidden, and the floating pane's own size and offset), which
     // lives on the window rather than here. Routing every write through RefreshTabChrome - rather
     // than only the ones a window event handler starts - covers UseVerticalTabs flipping from
-    // winser://settings, in a different tab entirely, and IsVerticalTabsAddressBarFocused being
-    // set by Ctrl+L before any pointer is involved.
+    // winser://settings, in a different tab entirely.
     partial void OnUseVerticalTabsChanged(bool value) => _window?.RefreshTabChrome();
 
     partial void OnIsVerticalTabsPinnedChanged(bool value) => _window?.RefreshTabChrome();
 
     partial void OnIsVerticalTabsPointerOverChanged(bool value) => _window?.RefreshTabChrome();
-
-    partial void OnIsVerticalTabsAddressBarFocusedChanged(bool value) => _window?.RefreshTabChrome();
 
     /// <summary>The owning window's HWND, for WinRT pickers that need an owner.</summary>
     public nint WindowHandle => _window?.WindowHandle ?? IntPtr.Zero;

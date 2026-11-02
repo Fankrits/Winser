@@ -215,16 +215,8 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         if (ViewModel.UseVerticalTabs)
         {
-            // Collapsed, the pane (and this address bar inside it) is not visible and cannot
-            // accept focus at all. Flagging it open takes effect through a binding, which needs
-            // a layout pass to actually happen before Focus() has anything to land on - the same
-            // reason BrowserTabPage.xaml.cs's own FindBar focus defers through the dispatcher.
-            ViewModel.IsVerticalTabsAddressBarFocused = true;
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                TopAddressBox.Focus(FocusState.Programmatic);
-                TopAddressBox.FindDescendant<TextBox>()?.SelectAll();
-            });
+            TopAddressBox.Focus(FocusState.Programmatic);
+            TopAddressBox.FindDescendant<TextBox>()?.SelectAll();
         }
         else
         {
@@ -979,11 +971,6 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnVerticalAddressGotFocus(object sender, RoutedEventArgs e)
     {
-        // Also covers clicking straight into an already hover-revealed address bar (not just
-        // Ctrl+L, which sets this itself before focus can even land): either way, the pane needs
-        // to stay open regardless of hover for as long as this box is being edited.
-        ViewModel.IsVerticalTabsAddressBarFocused = true;
-
         if (ViewModel.SelectedTab is { } tab)
         {
             tab.IsAddressFocused = true;
@@ -992,8 +979,6 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnVerticalAddressLostFocus(object sender, RoutedEventArgs e)
     {
-        ViewModel.IsVerticalTabsAddressBarFocused = false;
-
         if (ViewModel.SelectedTab is not { } tab)
         {
             return;
