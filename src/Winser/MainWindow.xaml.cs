@@ -213,6 +213,19 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void FocusAddressBar()
     {
+        if (ViewModel.IsFullScreen)
+        {
+            SetFullScreen(false);
+            DispatcherQueue.TryEnqueue(FocusVisibleAddressBar);
+        }
+        else
+        {
+            FocusVisibleAddressBar();
+        }
+    }
+
+    private void FocusVisibleAddressBar()
+    {
         if (ViewModel.UseVerticalTabs)
         {
             TopAddressBox.Focus(FocusState.Programmatic);
