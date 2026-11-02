@@ -923,6 +923,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         tab.IsAddressFocused = false;
 
         // Put back whatever the page's real address is if the edit was abandoned.
-        VerticalAddressBox.Text = UrlHelper.ForDisplay(tab.Url);
+        if (sender is AutoSuggestBox addressBox)
+        {
+            addressBox.Text = UrlHelper.ForDisplay(tab.Url);
+        }
     }
 }
