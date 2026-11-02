@@ -119,7 +119,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private bool _pointerOverVerticalTabsCard;
 
     /// <summary>Whether the caption buttons and the bar they sit on are currently showing.</summary>
-    private bool _isCaptionRevealed;
+    private bool _isCaptionRevealed = true;
 
     /// <summary>
     /// The caption inset in DIPs, remembered across the reveal. <c>TitleBar.RightInset</c> reads
@@ -429,6 +429,10 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
 
+        // The browser bar stays visible during normal browsing; fullscreen is the only state
+        // that removes the title bar and its controls.
+        SetCaptionRevealed(!ViewModel.IsFullScreen);
+
         // Nothing reserves layout space for vertical tabs: the expanded pane is a windowed Popup
         // floating over the page, and the hover trigger is the cursor's position rather than an
         // element (see the cursor watch section).
@@ -702,7 +706,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// A window that is genuinely behind another one has its corner covered by that window, so
     /// restoring its own buttons under there costs nothing and shows nothing.
     /// </remarks>
-    private void UpdateCaptionReveal() => SetCaptionRevealed(IsCursorInCaptionZone() || IsTopActionBarFocused());
+    private void UpdateCaptionReveal() => SetCaptionRevealed(!ViewModel.IsFullScreen);
 
     private bool IsTopActionBarFocused() =>
         TopAddressBox.FocusState != FocusState.Unfocused ||
