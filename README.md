@@ -131,7 +131,7 @@ dotnet run --project tests/UrlHelperChecks/UrlHelperChecks.csproj
 ```
 
 After building the app, run the native Windows UI smoke check with Windows PowerShell and a
-direct Python installation (`python.exe`; the Microsoft Store alias is not supported):
+direct Bun installation (`bun.exe` available on `PATH`):
 
 ```powershell
 .\tools\smoke-ui.ps1 -ExePath .\src\Winser\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Winser.exe
