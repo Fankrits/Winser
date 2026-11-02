@@ -4,15 +4,14 @@ namespace Winser.Services;
 
 /// <summary>
 /// Where Winser keeps its state. The app runs unpackaged, so <c>ApplicationData.Current</c>
-/// is off limits and everything lives under <c>%LOCALAPPDATA%\Winser</c> instead.
+/// is off limits and everything lives under <c>%LOCALAPPDATA%\Winser</c> unless a process sets
+/// <c>WINSER_USER_DATA_FOLDER</c> for an isolated run.
 /// </summary>
 public static class AppPaths
 {
     private static readonly Guid FolderIdDownloads = new("374DE290-123F-4565-9164-39C4925E467B");
 
-    public static string Root { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Winser");
+    public static string Root { get; } = ResolveRoot();
 
     /// <summary>JSON documents: settings, bookmarks, history, downloads, session.</summary>
     public static string Data { get; } = Ensure(Path.Combine(Root, "Data"));
@@ -67,6 +66,14 @@ public static class AppPaths
     {
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static string ResolveRoot()
+    {
+        var overridePath = Environment.GetEnvironmentVariable("WINSER_USER_DATA_FOLDER");
+        return string.IsNullOrWhiteSpace(overridePath)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Winser")
+            : Path.GetFullPath(overridePath);
     }
 
     private static bool TryGetKnownFolder(Guid folderId, out string path)
