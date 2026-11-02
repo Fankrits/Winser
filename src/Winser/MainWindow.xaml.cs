@@ -186,17 +186,9 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void RefreshTabChrome()
     {
-        if (ViewModel.UseVerticalTabs)
+        if (ViewModel.UseVerticalTabs && ViewModel.SelectedTab is { } selectedTab)
         {
-            var addressFocused = IsFocusWithin(TopAddressBox);
-            foreach (var tab in ViewModel.Tabs)
-            {
-                tab.IsAddressFocused = ReferenceEquals(tab, ViewModel.SelectedTab) && addressFocused;
-                if (!ReferenceEquals(tab, ViewModel.SelectedTab))
-                {
-                    tab.ClearSuggestions();
-                }
-            }
+            selectedTab.IsAddressFocused = IsFocusWithin(TopAddressBox);
         }
 
         UpdateChromeLayout();
@@ -451,6 +443,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         TabStrip.Margin = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs
             ? new Thickness(0, -TabStripHeight, 0, 0)
             : new Thickness(0);
+        TabStrip.IsAddTabButtonVisible = !ViewModel.IsFullScreen && !ViewModel.UseVerticalTabs;
 
         // The vertical mode drag region covers the complete responsive toolbar, including its
         // address row at narrow widths; the pane floats above it in its own popup.

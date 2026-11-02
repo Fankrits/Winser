@@ -187,9 +187,15 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedTabChanged(BrowserTabViewModel? value)
+    partial void OnSelectedTabChanged(BrowserTabViewModel? oldValue, BrowserTabViewModel? newValue)
     {
         RescheduleIdleSweep();
+        if (UseVerticalTabs && oldValue is { } oldTab)
+        {
+            oldTab.IsAddressFocused = false;
+            oldTab.ClearSuggestions();
+        }
+
         _window?.RefreshTabChrome();
     }
 
