@@ -222,8 +222,8 @@ public sealed partial class MainWindow : Window, IShellWindow
             ViewModel.IsVerticalTabsAddressBarFocused = true;
             DispatcherQueue.TryEnqueue(() =>
             {
-                VerticalAddressBox.Focus(FocusState.Programmatic);
-                VerticalAddressBox.FindDescendant<TextBox>()?.SelectAll();
+                TopAddressBox.Focus(FocusState.Programmatic);
+                TopAddressBox.FindDescendant<TextBox>()?.SelectAll();
             });
         }
         else

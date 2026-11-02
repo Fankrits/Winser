@@ -252,14 +252,10 @@
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
           <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--  App mark, InPrivate badge, and the pin toggle - the pane's own header, matching
-              TabStripHeader/TabStripFooter's job in horizontal mode.  -->
+        <!--  The toolbar above owns navigation and address actions; this pane is for tab selection.  -->
         <Grid
           Grid.Row="0"
           Height="40"
@@ -291,111 +287,11 @@
               Text="InPrivate"
               Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
           </Border>
-          <Button
-            Grid.Column="3"
-            Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
-            Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
         </Grid>
-
-        <!--  Nav buttons and address bar, standing in for BrowserTabPage's own toolbar (hidden
-              while vertical tabs is on, see BrowserViewModel.IsToolbarVisible) - both act on
-              whichever tab is currently selected, so every binding here is explicitly OneWay:
-              SelectedTab changes as the user switches tabs, unlike BrowserTabPage's own ViewModel,
-              which is fixed to one tab for that page's whole lifetime.  -->
-        <Grid
-          Grid.Row="1"
-          Margin="8,4,8,0"
-          ColumnSpacing="2"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <Button
-            Grid.Column="0"
-            AutomationProperties.Name="Back"
-            Command="{x:Bind ViewModel.SelectedTab.GoBackCommand, Mode=OneWay}"
-            Content="&#xE72B;"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="Back (Alt+Left)" />
-          <Button
-            Grid.Column="1"
-            AutomationProperties.Name="Forward"
-            Command="{x:Bind ViewModel.SelectedTab.GoForwardCommand, Mode=OneWay}"
-            Content="&#xE72A;"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="Forward (Alt+Right)" />
-          <Button
-            Grid.Column="2"
-            AutomationProperties.Name="Reload"
-            Command="{x:Bind ViewModel.SelectedTab.ReloadOrStopCommand, Mode=OneWay}"
-            Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
-            Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
-        </Grid>
-
-        <AutoSuggestBox
-          x:Name="VerticalAddressBox"
-          Grid.Row="2"
-          Height="32"
-          Margin="8,4"
-          CornerRadius="16"
-          ItemsSource="{x:Bind ViewModel.SelectedTab.Suggestions, Mode=OneWay}"
-          PlaceholderText="Search or enter web address"
-          Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
-          TextMemberPath="Text"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}"
-          GotFocus="OnVerticalAddressGotFocus"
-          LostFocus="OnVerticalAddressLostFocus"
-          QuerySubmitted="OnVerticalAddressQuerySubmitted"
-          TextChanged="OnVerticalAddressTextChanged">
-          <AutoSuggestBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:AddressSuggestion">
-              <Grid Padding="0,3" ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <FontIcon
-                  FontSize="14"
-                  Glyph="{x:Bind Glyph}"
-                  Opacity="0.65"
-                  VerticalAlignment="Center" />
-                <StackPanel Grid.Column="1">
-                  <TextBlock Text="{x:Bind Text}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock
-                    Opacity="0.6"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="{x:Bind Description}"
-                    TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-              </Grid>
-            </DataTemplate>
-          </AutoSuggestBox.ItemTemplate>
-        </AutoSuggestBox>
-
-        <Button
-          Grid.Row="3"
-          Margin="8,2,8,6"
-          HorizontalAlignment="Stretch"
-          HorizontalContentAlignment="Left"
-          Background="Transparent"
-          BorderThickness="0"
-          Command="{x:Bind ViewModel.AddTabCommand}"
-          ToolTipService.ToolTip="New tab (Ctrl+T)">
-          <StackPanel Orientation="Horizontal" Spacing="10">
-            <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
-            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-          </StackPanel>
-        </Button>
 
         <ListView
           x:Name="VerticalTabList"
-          Grid.Row="4"
+          Grid.Row="1"
           Padding="6,0,6,6"
           AllowDrop="True"
           CanReorderItems="True"
