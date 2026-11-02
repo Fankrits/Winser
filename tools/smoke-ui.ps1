@@ -11,10 +11,17 @@ $artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repo 'artifacts'))
 $profileRoot = [IO.Path]::GetFullPath((Join-Path $artifactsRoot ("ui-smoke-{0}" -f [guid]::NewGuid().ToString('N'))))
 $screenshotRoot = Join-Path $artifactsRoot 'ux-review'
 $screenshotPath = Join-Path $screenshotRoot ("winser-ui-smoke-{0}.png" -f [guid]::NewGuid().ToString('N'))
+$wideScreenshotPath = Join-Path $screenshotRoot ("winser-ui-smoke-800px-{0}.png" -f [guid]::NewGuid().ToString('N'))
+$narrowScreenshotPath = Join-Path $screenshotRoot ("winser-ui-smoke-narrow-{0}.png" -f [guid]::NewGuid().ToString('N'))
+$settingsScreenshotPath = Join-Path $screenshotRoot ("winser-ui-smoke-settings-{0}.png" -f [guid]::NewGuid().ToString('N'))
 $normalRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Winser'))
 $serverRoot = Join-Path $profileRoot 'http'
 $serverProcess = $null
 $app = $null
+$main = $null
+$testWindowHandle = [IntPtr]::Zero
+$desktop = $null
+$smokeFailed = $false
 
 if ($profileRoot.StartsWith($normalRoot, [StringComparison]::OrdinalIgnoreCase) -or
     $normalRoot.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -46,9 +53,50 @@ try {
     Add-Type -AssemblyName UIAutomationTypes
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class WinserSmokeNative {
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
+    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern IntPtr SetActiveWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool attach);
+    public static int ForegroundProcessId() {
+        uint processId;
+        GetWindowThreadProcessId(GetForegroundWindow(), out processId);
+        return (int)processId;
+    }
+    public static int WindowProcessId(IntPtr hWnd) {
+        uint processId;
+        GetWindowThreadProcessId(hWnd, out processId);
+        return (int)processId;
+    }
+    public static void ActivateWindow(IntPtr hWnd) {
+        uint processId;
+        uint targetThread = GetWindowThreadProcessId(hWnd, out processId);
+        uint currentThread = GetCurrentThreadId();
+        bool attached = targetThread != 0 && currentThread != targetThread &&
+            AttachThreadInput(currentThread, targetThread, true);
+        try {
+            ShowWindow(hWnd, 9);
+            BringWindowToTop(hWnd);
+            SetActiveWindow(hWnd);
+            SetForegroundWindow(hWnd);
+        }
+        finally {
+            if (attached) AttachThreadInput(currentThread, targetThread, false);
+        }
+    }
+}
+'@
 
     function Save-WindowScreenshot($element, $path) {
         $bounds = $element.Current.BoundingRectangle
+        if ($bounds.IsEmpty -or [double]::IsInfinity($bounds.Left) -or [double]::IsInfinity($bounds.Top)) { return }
         $left = [Math]::Max(0, [int][Math]::Floor($bounds.Left))
         $top = [Math]::Max(0, [int][Math]::Floor($bounds.Top))
         $width = [int][Math]::Ceiling($bounds.Width)
@@ -67,17 +115,29 @@ try {
     $listener.Start()
     $port = ([Net.IPEndPoint] $listener.LocalEndpoint).Port
     $listener.Stop()
-    $python = (Get-Command python.exe -ErrorAction Stop | Where-Object { $_.Source -notlike '*WindowsApps*' } | Select-Object -First 1).Source
-    if (-not $python) { throw 'A direct python.exe installation is required for the UI smoke server.' }
-    $serverArgs = "-m http.server $port --bind 127.0.0.1 --directory `"$serverRoot`""
-    $serverProcess = Start-Process -FilePath $python -ArgumentList $serverArgs -PassThru -WindowStyle Hidden
-    $url = "http://127.0.0.1:$port/"
-    $ready = $false
-    for ($i = 0; $i -lt 40; $i++) {
-        try { Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 1 | Out-Null; $ready = $true; break }
-        catch { Start-Sleep -Milliseconds 250 }
+    $bun = (Get-Command bun.exe -ErrorAction Stop | Select-Object -First 1).Source
+    if (-not $bun) { throw 'A direct bun.exe installation is required for the UI smoke server.' }
+    $htmlPath = Join-Path $serverRoot 'index.html'
+    $serverScript = Join-Path $serverRoot 'server.js'
+    @'
+const port = Number(Bun.argv[2]);
+const page = Bun.argv[3];
+Bun.serve({
+  hostname: "127.0.0.1",
+  port,
+  fetch(request) {
+    if (new URL(request.url).pathname === "/") {
+      return new Response(Bun.file(page), { headers: { "content-type": "text/html; charset=utf-8" } });
     }
-    if (-not $ready) { throw "Loopback server did not become ready at $url" }
+    return new Response("Not found", { status: 404 });
+  },
+});
+'@ | Set-Content -LiteralPath $serverScript -Encoding utf8
+    $serverProcess = Start-Process -FilePath $bun -ArgumentList @($serverScript, "$port", $htmlPath) -PassThru -WindowStyle Hidden
+    $url = "http://127.0.0.1:$port/"
+    Start-Sleep -Milliseconds 500
+    $serverProcess.Refresh()
+    if ($serverProcess.HasExited) { throw 'The isolated Bun loopback server exited before the UI smoke started.' }
 
     $prior = $env:WINSER_USER_DATA_FOLDER
     try {
@@ -92,6 +152,16 @@ try {
     $desktop = [Windows.Automation.AutomationElement]::RootElement
     $processCondition = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::ProcessIdProperty, $app.Id)
+    $ownedProcessIds = [Collections.Generic.HashSet[int]]::new()
+    [void] $ownedProcessIds.Add($app.Id)
+    $processes = @(Get-CimInstance Win32_Process)
+    do {
+        $addedChild = $false
+        foreach ($process in $processes) {
+            if ($ownedProcessIds.Contains([int]$process.ParentProcessId) -and
+                $ownedProcessIds.Add([int]$process.ProcessId)) { $addedChild = $true }
+        }
+    } while ($addedChild)
     $main = $null
     for ($i = 0; $i -lt 80 -and $null -eq $main; $i++) {
         $app.Refresh()
@@ -101,21 +171,68 @@ try {
         else { Start-Sleep -Milliseconds 250 }
     }
     if ($null -eq $main) { throw 'Winser did not create a main window.' }
+    $testWindowHandle = [IntPtr] $main.Current.NativeWindowHandle
+    if ($testWindowHandle -eq [IntPtr]::Zero) { throw 'Winser UIA main window has no native handle.' }
+    $main.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState(
+        [Windows.Automation.WindowVisualState]::Normal)
+    if ([WinserSmokeNative]::WindowProcessId($testWindowHandle) -ne $app.Id) {
+        throw 'Winser main window handle does not belong to the isolated app process.'
+    }
+    [WinserSmokeNative]::ActivateWindow($testWindowHandle)
     $main.GetCurrentPattern([Windows.Automation.TransformPattern]::Pattern).Resize(800, 420)
-    Start-Sleep -Milliseconds 500
+    $windowBounds = $null
+    for ($i = 0; $i -lt 40; $i++) {
+        $windowBounds = $main.Current.BoundingRectangle
+        if (-not $windowBounds.IsEmpty -and $windowBounds.Left -gt -10000 -and
+            $windowBounds.Width -le 900 -and $windowBounds.Height -le 600) { break }
+        Start-Sleep -Milliseconds 250
+    }
+    if ($windowBounds.IsEmpty -or $windowBounds.Left -le -10000 -or $windowBounds.Width -gt 900 -or $windowBounds.Height -gt 600) {
+        throw "Could not resize the app window for overflow checks: $windowBounds"
+    }
+    Save-WindowScreenshot $main $wideScreenshotPath
 
     function Find-Ui($name, $type = $null, $visibleOnly = $false) {
-        $nameCondition = [Windows.Automation.PropertyCondition]::new(
-            [Windows.Automation.AutomationElement]::NameProperty, $name)
-        $condition = $nameCondition
-        if ($null -ne $type) {
-            $typeCondition = [Windows.Automation.PropertyCondition]::new(
-                [Windows.Automation.AutomationElement]::ControlTypeProperty, $type)
-            $condition = [Windows.Automation.AndCondition]::new($nameCondition, $typeCondition)
+        $roots = @($main) + @($desktop.FindAll([Windows.Automation.TreeScope]::Children, $processCondition))
+        foreach ($root in $roots) {
+            if ($null -eq $root) { continue }
+            $queue = [Collections.Generic.Queue[object]]::new()
+            $queue.Enqueue(@($root, 0))
+            while ($queue.Count -gt 0) {
+                $entry = $queue.Dequeue()
+                $element = $entry[0]
+                $depth = $entry[1]
+                if ($depth -ge 12) { continue }
+                $current = $element.Current
+                if ($current.Name -eq $name -and ($null -eq $type -or $current.ControlType -eq $type) -and
+                    (-not $visibleOnly -or -not $current.IsOffscreen)) { return $element }
+                foreach ($child in $element.FindAll([Windows.Automation.TreeScope]::Children,
+                        [Windows.Automation.Condition]::TrueCondition)) {
+                    $queue.Enqueue(@($child, $depth + 1))
+                }
+            }
         }
-        foreach ($window in $desktop.FindAll([Windows.Automation.TreeScope]::Children, $processCondition)) {
-            $element = $window.FindFirst([Windows.Automation.TreeScope]::Subtree, $condition)
-            if ($null -ne $element -and (-not $visibleOnly -or -not $element.Current.IsOffscreen)) { return $element }
+        return $null
+    }
+
+    function Find-UiType($type, $visibleOnly = $false) {
+        $roots = @($main) + @($desktop.FindAll([Windows.Automation.TreeScope]::Children, $processCondition))
+        foreach ($root in $roots) {
+            if ($null -eq $root) { continue }
+            $queue = [Collections.Generic.Queue[object]]::new()
+            $queue.Enqueue(@($root, 0))
+            while ($queue.Count -gt 0) {
+                $entry = $queue.Dequeue()
+                $element = $entry[0]
+                $depth = $entry[1]
+                if ($depth -ge 12) { continue }
+                $current = $element.Current
+                if ($current.ControlType -eq $type -and (-not $visibleOnly -or -not $current.IsOffscreen)) { return $element }
+                foreach ($child in $element.FindAll([Windows.Automation.TreeScope]::Children,
+                        [Windows.Automation.Condition]::TrueCondition)) {
+                    $queue.Enqueue(@($child, $depth + 1))
+                }
+            }
         }
         return $null
     }
@@ -137,10 +254,122 @@ try {
         throw "UI Automation element remained visible: $name"
     }
 
-    function Press-Enter($element) {
-        $element.SetFocus()
-        [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    function Wait-Focused($name, $type = $null) {
+        for ($i = 0; $i -lt 40; $i++) {
+            $focused = [Windows.Automation.AutomationElement]::FocusedElement
+            if ($null -ne $focused -and $focused.Current.Name -eq $name -and
+                ($null -eq $type -or $focused.Current.ControlType -eq $type)) { return $focused }
+            Start-Sleep -Milliseconds 250
+        }
+        $actual = [Windows.Automation.AutomationElement]::FocusedElement
+        throw "Focus did not move to ${name}:$type (actual $($actual.Current.Name):$($actual.Current.ControlType.ProgrammaticName))."
     }
+
+    function Resize-TestWindow([int] $width, [int] $height) {
+        $main.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern).SetWindowVisualState(
+            [Windows.Automation.WindowVisualState]::Normal)
+        $main.GetCurrentPattern([Windows.Automation.TransformPattern]::Pattern).Resize($width, $height)
+        for ($i = 0; $i -lt 40; $i++) {
+            $bounds = $main.Current.BoundingRectangle
+            if ($bounds.Width -le ($width + 20) -and $bounds.Width -ge ($width - 20) -and
+                $bounds.Height -le ($height + 20) -and $bounds.Height -ge ($height - 20)) { return }
+            Start-Sleep -Milliseconds 250
+        }
+        throw "Window did not resize to ${width}x${height}: $($main.Current.BoundingRectangle)"
+    }
+
+    function Wait-Setting($name, $expected) {
+        $settingsPath = Join-Path $profileRoot 'Data\settings.json'
+        for ($i = 0; $i -lt 40; $i++) {
+            if (Test-Path -LiteralPath $settingsPath) {
+                try {
+                    $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+                    if ($settings.$name -eq $expected) { return }
+                }
+                catch { }
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        throw "Settings file did not contain $name=$expected."
+    }
+
+    function Ensure-AppForeground {
+        $handle = $testWindowHandle
+        if ([WinserSmokeNative]::WindowProcessId($handle) -ne $app.Id) {
+            throw 'Refusing to activate a window outside the isolated test app process.'
+        }
+        for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            $currentPid = [WinserSmokeNative]::ForegroundProcessId()
+            if ($ownedProcessIds.Contains($currentPid)) { return }
+
+            # UIA focus targets only the owned test window; then request activation and verify it.
+            try { $main.SetFocus() } catch { }
+            [WinserSmokeNative]::ActivateWindow($handle)
+            Start-Sleep -Milliseconds 250
+        }
+        $foregroundPid = [WinserSmokeNative]::ForegroundProcessId()
+        if (-not $ownedProcessIds.Contains($foregroundPid)) { throw "Refusing to send keys; foreground pid $foregroundPid is outside the isolated test app." }
+    }
+
+    function Move-PointerTo($element) {
+        $bounds = $element.Current.BoundingRectangle
+        if ($bounds.IsEmpty -or $bounds.Width -le 0 -or $bounds.Height -le 0) { return }
+        [Windows.Forms.Cursor]::Position = [Drawing.Point]::new(
+            [int]($bounds.Left + $bounds.Width / 2), [int]($bounds.Top + $bounds.Height / 2))
+    }
+
+    function Press-Enter($element) {
+        Ensure-AppForeground
+        Move-PointerTo $element
+        $element.SetFocus()
+        Send-AppKeys '{ENTER}'
+    }
+
+    function Invoke-Ui($element) {
+        try { $element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke() }
+        catch {
+            Ensure-AppForeground
+            $element.SetFocus()
+            Send-AppKeys ' '
+        }
+    }
+
+    function Send-AppKeys([string] $keys) {
+        $foregroundPid = [WinserSmokeNative]::ForegroundProcessId()
+        if (-not $ownedProcessIds.Contains($foregroundPid)) { throw "Refusing to send keys; foreground pid $foregroundPid is outside the isolated test app." }
+        [Windows.Forms.SendKeys]::SendWait($keys)
+    }
+
+    function Save-UiTree($desktopRoot, $processIds, $path) {
+        $lines = [Collections.Generic.List[string]]::new()
+        foreach ($window in $desktopRoot.FindAll([Windows.Automation.TreeScope]::Children,
+                [Windows.Automation.Condition]::TrueCondition)) {
+            $current = $window.Current
+            if (-not $processIds.Contains([int]$current.ProcessId)) { continue }
+            $lines.Add(("ROOT pid={0} type={1} name=<{2}> bounds={3}" -f
+                $current.ProcessId, $current.ControlType.ProgrammaticName, $current.Name, $current.BoundingRectangle))
+            $queue = [Collections.Generic.Queue[object]]::new()
+            $queue.Enqueue(@($window, 0))
+            while ($queue.Count -gt 0) {
+                $entry = $queue.Dequeue()
+                $element = $entry[0]
+                $depth = $entry[1]
+                if ($depth -ge 7) { continue }
+                $elementCurrent = $element.Current
+                $lines.Add(("  {0}{1} type={2} focusable={3} focused={4} offscreen={5} bounds={6}" -f
+                    (' ' * $depth), $elementCurrent.Name, $elementCurrent.ControlType.ProgrammaticName,
+                    $elementCurrent.IsKeyboardFocusable, $elementCurrent.HasKeyboardFocus,
+                    $elementCurrent.IsOffscreen, $elementCurrent.BoundingRectangle))
+                foreach ($child in $element.FindAll([Windows.Automation.TreeScope]::Children,
+                        [Windows.Automation.Condition]::TrueCondition)) {
+                    $queue.Enqueue(@($child, $depth + 1))
+                }
+            }
+        }
+        $lines | Set-Content -LiteralPath $path -Encoding utf8
+    }
+
+    Ensure-AppForeground
 
     # The app's WebView profile directory is the in-process proof that it resolved our override.
     for ($i = 0; $i -lt 40 -and -not (Test-Path (Join-Path $profileRoot 'Profile')); $i++) {
@@ -150,16 +379,17 @@ try {
         throw "Winser did not create its WebView profile under the isolated root: $profileRoot"
     }
     $showTabs = Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)
-    $address = Wait-Ui 'Search or enter web address'
+    $address = Wait-Ui 'Address and search' ([Windows.Automation.ControlType]::Edit)
 
     # Exercise navigation and the site info/menu controls using only the disposable profile.
+    Ensure-AppForeground
     $address.SetFocus()
-    [Windows.Forms.SendKeys]::SendWait('^a')
+    Send-AppKeys '^a'
     $bareAddress = "127.0.0.1:$port/"
-    [Windows.Forms.SendKeys]::SendWait($bareAddress)
+    Send-AppKeys $bareAddress
     $enteredValue = $address.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
     if ($enteredValue -ne $bareAddress) { throw "Address box did not contain the typed bare host: $enteredValue" }
-    [Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    Send-AppKeys '{ENTER}'
     Wait-Ui 'Site information' ([Windows.Automation.ControlType]::Button) | Out-Null
 
     # The tab title confirms WebView2 loaded the loopback page, not just the address input.
@@ -167,6 +397,9 @@ try {
     Press-Enter (Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button))
     Wait-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true | Out-Null
     Wait-Ui 'Winser smoke page' ([Windows.Automation.ControlType]::ListItem) $true | Out-Null
+    $resolvedValue = (Wait-Ui 'Address and search' ([Windows.Automation.ControlType]::Edit)).GetCurrentPattern(
+        [Windows.Automation.ValuePattern]::Pattern).Current.Value
+    if ($resolvedValue -ne $url) { throw "Bare host did not resolve to $url (address value: $resolvedValue)." }
     $siteInfo = Wait-Ui 'Site information' ([Windows.Automation.ControlType]::Button)
     $siteInfo.SetFocus()
     [Windows.Forms.Cursor]::Position = [Drawing.Point]::new(
@@ -176,32 +409,58 @@ try {
 
     Press-Enter $siteInfo
     Wait-Ui '127.0.0.1' $null $true | Out-Null
-    Wait-Ui $url $null $true | Out-Null
-    [Windows.Forms.SendKeys]::SendWait('{ESC}')
+    Send-AppKeys '{ESC}'
+
+    # Ctrl+T, Ctrl+L, and F11 must leave keyboard focus in the actual address Edit.
+    Send-AppKeys '^t'
+    Wait-Focused 'Address and search' ([Windows.Automation.ControlType]::Edit) | Out-Null
+    $address = Find-Ui 'Address and search' ([Windows.Automation.ControlType]::Edit)
+    Send-AppKeys '^a'
+    $bareAddress = "127.0.0.1:$port/"
+    Send-AppKeys $bareAddress
+    if ($address.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value -ne $bareAddress) {
+        throw 'Typing after Ctrl+T did not reach the visible address Edit.'
+    }
+    Send-AppKeys '{ESC}'
+    Send-AppKeys '^l'
+    Wait-Focused 'Address and search' ([Windows.Automation.ControlType]::Edit) | Out-Null
+    Send-AppKeys '{F11}'
+    Start-Sleep -Milliseconds 500
+    Send-AppKeys '^l'
+    Wait-Focused 'Address and search' ([Windows.Automation.ControlType]::Edit) | Out-Null
+    Send-AppKeys '{ESC}'
+    Send-AppKeys '^w'
 
     $menu = Wait-Ui 'Settings and more' ([Windows.Automation.ControlType]::Button)
     Press-Enter $menu
-    Wait-Ui 'Settings' $null $true | Out-Null
-    [Windows.Forms.SendKeys]::SendWait('{ESC}')
+    Wait-Ui 'Settings' ([Windows.Automation.ControlType]::MenuItem) $true | Out-Null
+    Send-AppKeys '{ESC}'
 
     # Give the pane enough tabs to scroll, then verify keyboard selection stays visible.
-    for ($i = 0; $i -lt 12; $i++) { [Windows.Forms.SendKeys]::SendWait('^t'); Start-Sleep -Milliseconds 150 }
+    for ($i = 0; $i -lt 12; $i++) { Send-AppKeys '^t'; Start-Sleep -Milliseconds 150 }
 
     # Open the unpinned pane, verify focus keeps it open after pointer exit, then verify focus-out closes it.
     Press-Enter (Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button))
     Wait-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true | Out-Null
     $list = Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true
-    $list.SetFocus()
+    $itemCondition = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [Windows.Automation.ControlType]::ListItem)
+    $listItems = $list.FindAll([Windows.Automation.TreeScope]::Descendants, $itemCondition)
+    if ($listItems.Count -eq 0) { throw 'The vertical tab list has no realized items.' }
     $scroll = $list.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern)
-    [Windows.Forms.SendKeys]::SendWait('{HOME}')
+    Send-AppKeys '{HOME}'
     Start-Sleep -Milliseconds 250
     $startScroll = $scroll.Current.VerticalScrollPercent
-    $firstSelection = $list.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection()
-    [Windows.Forms.SendKeys]::SendWait('{END}')
+    $selection = $list.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern)
+    $firstSelection = $selection.Current.GetSelection()
+    if ($firstSelection.Count -eq 0) { throw 'Home did not select a tab.' }
+    $firstSelectionId = [string]::Join(',', $firstSelection[0].GetRuntimeId())
+    Send-AppKeys '{END}'
     Start-Sleep -Milliseconds 400
-    $selected = $list.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection()
+    $selected = $selection.Current.GetSelection()
     if ($selected.Count -eq 0 -or $firstSelection.Count -eq 0 -or
-        $selected[0].Current.Name -eq $firstSelection[0].Current.Name -or $selected[0].Current.IsOffscreen) {
+        [string]::Join(',', $selected[0].GetRuntimeId()) -eq $firstSelectionId -or $selected[0].Current.IsOffscreen) {
         throw 'Keyboard selection did not scroll the selected tab into view.'
     }
     if ($scroll.Current.VerticalScrollPercent -le $startScroll) {
@@ -219,31 +478,21 @@ try {
     if ($null -eq (Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true)) {
         throw 'The vertical tab pane closed while its list retained keyboard focus.'
     }
-    [Windows.Forms.SendKeys]::SendWait('{DOWN}')
-    [Windows.Forms.SendKeys]::SendWait('{UP}')
+    Send-AppKeys '{DOWN}'
+    Send-AppKeys '{UP}'
     Start-Sleep -Milliseconds 300
     if ($null -eq (Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true)) {
         throw 'Keyboard arrow navigation closed the focused vertical tab pane.'
     }
-    $leftByTab = $false
-    for ($i = 0; $i -lt 6; $i++) {
-        [Windows.Forms.SendKeys]::SendWait('{TAB}')
-        Start-Sleep -Milliseconds 250
-        if ($null -ne (Find-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)) -and
-            $null -eq (Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true)) {
-            $leftByTab = $true
-            break
-        }
-    }
-    if (-not $leftByTab) {
-        throw 'Tab focus leaving the vertical tab list did not close the unpinned pane.'
-    }
+    Send-AppKeys '{ESC}'
+    Wait-UiGone 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true
+    Wait-Focused 'Address and search' | Out-Null
 
     # Pinning must keep the pane open after the pointer exits.
-    $showTabs = Find-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)
-    Press-Enter $showTabs
-    $pin = Wait-Ui 'Pin the tab pane open' ([Windows.Automation.ControlType]::Button)
-    Press-Enter $pin
+    $menu = Find-Ui 'Settings and more' ([Windows.Automation.ControlType]::Button)
+    Press-Enter $menu
+    $pin = Wait-Ui 'Pin the tab pane open' ([Windows.Automation.ControlType]::MenuItem) $true
+    Invoke-Ui $pin
     [Windows.Forms.Cursor]::Position = [Drawing.Point]::new(
         [Windows.Forms.Screen]::PrimaryScreen.Bounds.Right - 10,
         [Windows.Forms.Screen]::PrimaryScreen.Bounds.Bottom - 10)
@@ -252,7 +501,91 @@ try {
         throw 'Pinning did not keep the vertical tab pane open after pointer exit.'
     }
 
+    # A second row should preserve a usable address field at narrow widths.
+    Resize-TestWindow 480 420
+    $narrowAddress = Wait-Ui 'Address and search' ([Windows.Automation.ControlType]::Edit)
+    $narrowBounds = $narrowAddress.Current.BoundingRectangle
+    if ($narrowBounds.Width -lt 180 -or $narrowBounds.IsEmpty -or $narrowAddress.Current.IsOffscreen) {
+        throw "Address field is not usable at 480px window width: $narrowBounds"
+    }
+    foreach ($name in @('Forward', 'New tab', 'Pin the tab pane open')) {
+        if ($null -ne (Find-Ui $name ([Windows.Automation.ControlType]::Button) $true)) {
+            throw "Compact toolbar control '$name' remained visible at 480px."
+        }
+    }
+    Send-AppKeys '^f'
+    Wait-Ui 'Find on page' $null $true | Out-Null
+    $findWindow = $main.Current.BoundingRectangle
+    foreach ($name in @('Match case', 'Previous match', 'Next match', 'Close find')) {
+        $findControl = Wait-Ui $name ([Windows.Automation.ControlType]::Button) $true
+        $bounds = $findControl.Current.BoundingRectangle
+        if ($bounds.IsEmpty -or $bounds.Left -lt $findWindow.Left -or $bounds.Right -gt $findWindow.Right -or
+            $bounds.Top -lt $findWindow.Top -or $bounds.Bottom -gt $findWindow.Bottom) {
+            throw "Find control '$name' is outside the 480px window: $bounds"
+        }
+    }
+    Press-Enter (Find-Ui 'Close find' ([Windows.Automation.ControlType]::Button) $true)
+    Save-WindowScreenshot $main $narrowScreenshotPath
+    Resize-TestWindow 1100 700
+
+    # Open the Appearance settings page and exercise both theme choices in the isolated profile.
+    $menu = Find-Ui 'Settings and more' ([Windows.Automation.ControlType]::Button)
+    Press-Enter $menu
+    $settingsItem = Wait-Ui 'Settings' ([Windows.Automation.ControlType]::MenuItem) $true
+    Invoke-Ui $settingsItem
+    Wait-Ui 'Appearance' ([Windows.Automation.ControlType]::Text) $true | Out-Null
+    $themeCombo = Wait-Ui 'Theme' ([Windows.Automation.ControlType]::ComboBox) $true
+    $expand = $themeCombo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
+    $expand.Expand()
+    $lightOption = Wait-Ui 'Light' $null $true
+    $optionPatterns = @($lightOption.GetSupportedPatterns() | ForEach-Object { $_.ProgrammaticName }) -join ', '
+    Write-Output "Theme Light UIA peer: $($lightOption.Current.ControlType.ProgrammaticName); patterns=[$optionPatterns]"
+    $lightPattern = $null
+    if ($lightOption.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$lightPattern)) {
+        $lightPattern.Select()
+    }
+    else { Invoke-Ui $lightOption }
+    Wait-Setting 'theme' 1
+    $expand.Expand()
+    $darkOption = Wait-Ui 'Dark' $null $true
+    $darkPattern = $null
+    if ($darkOption.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$darkPattern)) {
+        $darkPattern.Select()
+    }
+    else { Invoke-Ui $darkOption }
+    Wait-Setting 'theme' 2
+
+    # Verify the responsive horizontal mode and keyboard address entry, then restore vertical mode.
+    $verticalToggle = Wait-Ui 'Show tabs on the side' ([Windows.Automation.ControlType]::Button) $true
+    $togglePattern = $verticalToggle.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
+    if ($togglePattern.Current.ToggleState -eq [Windows.Automation.ToggleState]::On) { $togglePattern.Toggle() }
+    Wait-Setting 'useVerticalTabs' $false
+    Send-AppKeys '^t'
+    Wait-Focused 'Address and search' ([Windows.Automation.ControlType]::Edit) | Out-Null
+    $horizontalAddress = Find-Ui 'Address and search' ([Windows.Automation.ControlType]::Edit)
+    Send-AppKeys '^a'
+    $bareAddress = "127.0.0.1:$port/"
+    Send-AppKeys $bareAddress
+    if ($horizontalAddress.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value -ne $bareAddress) {
+        throw 'Typing after Ctrl+T did not reach the horizontal address edit.'
+    }
+    Send-AppKeys '{ENTER}'
+    Wait-Ui 'Winser smoke page' ([Windows.Automation.ControlType]::TabItem) $true | Out-Null
+    Send-AppKeys '^w'
+    $verticalToggle = Wait-Ui 'Show tabs on the side' ([Windows.Automation.ControlType]::Button) $true
+    $togglePattern = $verticalToggle.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
+    if ($togglePattern.Current.ToggleState -eq [Windows.Automation.ToggleState]::Off) { $togglePattern.Toggle() }
+    Wait-Setting 'useVerticalTabs' $true
+    Save-WindowScreenshot $main $settingsScreenshotPath
+
     Write-Output "UI smoke passed: isolated profile $profileRoot; loopback page $url"
+    Write-Output "800px screenshot: $wideScreenshotPath"
+    Write-Output "Narrow-window screenshot: $narrowScreenshotPath"
+    Write-Output "Appearance settings screenshot: $settingsScreenshotPath"
+}
+catch {
+    $smokeFailed = $true
+    throw
 }
 finally {
     if ($null -ne $main) {
@@ -261,6 +594,14 @@ finally {
             Write-Output "UI screenshot: $screenshotPath"
         }
         catch { Write-Warning "Could not save UI screenshot: $_" }
+    }
+    if ($smokeFailed -and $null -ne $app -and $null -ne $desktop) {
+        $treePath = Join-Path $screenshotRoot ("winser-uia-{0}.txt" -f $app.Id)
+        try {
+            Save-UiTree $desktop $ownedProcessIds $treePath
+            Write-Output "UI Automation snapshot: $treePath"
+        }
+        catch { Write-Warning "Could not save UI Automation snapshot: $_" }
     }
     if ($null -ne $app -and -not $app.HasExited) {
         [void] $app.CloseMainWindow()
