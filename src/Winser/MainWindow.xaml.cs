@@ -144,6 +144,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(CustomDragRegion);
+        RemoveWindowFrame();
         ApplyCaptionReveal();
 
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
@@ -191,8 +192,21 @@ public sealed partial class MainWindow : Window, IShellWindow
             ? AppWindowPresenterKind.FullScreen
             : AppWindowPresenterKind.Overlapped);
 
+        if (!fullScreen)
+        {
+            RemoveWindowFrame();
+        }
+
         ViewModel.IsFullScreen = fullScreen;
         UpdateChromeLayout();
+    }
+
+    private void RemoveWindowFrame()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
+        }
     }
 
     public void RefreshTabChrome() => UpdateChromeLayout();
