@@ -104,9 +104,13 @@ public sealed partial class WebContentView : UserControl, IWebViewHost
         {
             _core.Navigate(url);
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or UriFormatException)
         {
             Tab?.ReportNavigationCompleted(false, $"“{url}” is not a valid address.");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Tab?.ReportNavigationCompleted(false, "Winser could not start this navigation.");
         }
     }
 

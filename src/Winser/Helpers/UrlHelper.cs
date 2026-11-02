@@ -97,21 +97,23 @@ public static partial class UrlHelper
             }
         }
 
+        // Protocol-relative paste, e.g. "//example.com/x".
+        if (text.StartsWith("//", StringComparison.Ordinal))
+        {
+            return TryParseProtocolRelative(text, out var target)
+                ? target
+                : engine.BuildSearchUrl(text);
+        }
+
         if (Uri.TryCreate(text, UriKind.Absolute, out var absolute) &&
-            NavigableSchemes.Contains(absolute.Scheme))
+            NavigableSchemes.Contains(absolute.Scheme) && IsValidNavigableUri(absolute))
         {
             return text;
         }
 
-        // Protocol-relative paste, e.g. "//example.com/x".
-        if (text.StartsWith("//", StringComparison.Ordinal))
+        if (TryParseBareHost(text, out var host))
         {
-            return "https:" + text;
-        }
-
-        if (!ContainsWhitespace(text) && HostLike().IsMatch(text))
-        {
-            return "https://" + text;
+            return (IsLoopbackHost(host) ? "http://" : "https://") + text;
         }
 
         return engine.BuildSearchUrl(text);
@@ -121,15 +123,21 @@ public static partial class UrlHelper
     public static bool LooksNavigable(string? input)
     {
         var text = input?.Trim();
-        if (string.IsNullOrEmpty(text) || ContainsWhitespace(text))
+        if (string.IsNullOrEmpty(text))
         {
             return false;
         }
 
+        if (text.StartsWith("//", StringComparison.Ordinal))
+        {
+            return TryParseProtocolRelative(text, out _);
+        }
+
         return InternalPages.IsInternal(text)
             || WindowsPathLike().IsMatch(text)
-            || (Uri.TryCreate(text, UriKind.Absolute, out var uri) && NavigableSchemes.Contains(uri.Scheme))
-            || HostLike().IsMatch(text);
+            || (Uri.TryCreate(text, UriKind.Absolute, out var uri) &&
+                NavigableSchemes.Contains(uri.Scheme) && IsValidNavigableUri(uri))
+            || TryParseBareHost(text, out _);
     }
 
     /// <summary>What the address bar should show for a given loaded URL.</summary>
@@ -216,4 +224,44 @@ public static partial class UrlHelper
 
         return false;
     }
+
+    private static bool TryParseBareHost(string text, out Uri host)
+    {
+        host = null!;
+        if (ContainsWhitespace(text) || !HostLike().IsMatch(text) ||
+            !Uri.TryCreate("https://" + text, UriKind.Absolute, out var parsed) ||
+            !IsValidNavigableUri(parsed))
+        {
+            return false;
+        }
+
+        host = parsed;
+        return true;
+    }
+
+    private static bool TryParseProtocolRelative(string text, out string target)
+    {
+        target = string.Empty;
+        if (!text.StartsWith("//", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var candidate = "https:" + text;
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri) || !IsValidNavigableUri(uri))
+        {
+            return false;
+        }
+
+        target = uri.AbsoluteUri;
+        return true;
+    }
+
+    private static bool IsValidNavigableUri(Uri uri) =>
+        (!uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+         !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)) ||
+        (!string.IsNullOrEmpty(uri.Host) && string.IsNullOrEmpty(uri.UserInfo));
+
+    private static bool IsLoopbackHost(Uri uri) =>
+        uri.IsLoopback || uri.Host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase);
 }
