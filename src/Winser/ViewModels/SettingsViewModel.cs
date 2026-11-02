@@ -68,19 +68,43 @@ public sealed partial class SettingsViewModel : ObservableObject
     public int ThemeIndex
     {
         get => (int)Values.Theme;
-        set => Set(value, (int)Values.Theme, v => Values.Theme = (AppTheme)v);
+        set
+        {
+            if (value < 0 || value >= ThemeOptions.Count)
+            {
+                return;
+            }
+
+            Set(value, (int)Values.Theme, v => Values.Theme = (AppTheme)v);
+        }
     }
 
     public int StartupIndex
     {
         get => (int)Values.Startup;
-        set => Set(value, (int)Values.Startup, v => Values.Startup = (StartupBehavior)v);
+        set
+        {
+            if (value < 0 || value >= StartupOptions.Count)
+            {
+                return;
+            }
+
+            Set(value, (int)Values.Startup, v => Values.Startup = (StartupBehavior)v);
+        }
     }
 
     public int TrackingIndex
     {
         get => (int)Values.TrackingPrevention;
-        set => Set(value, (int)Values.TrackingPrevention, v => Values.TrackingPrevention = (TrackingPrevention)v);
+        set
+        {
+            if (value < 0 || value >= TrackingOptions.Count)
+            {
+                return;
+            }
+
+            Set(value, (int)Values.TrackingPrevention, v => Values.TrackingPrevention = (TrackingPrevention)v);
+        }
     }
 
     public int SearchEngineIndex

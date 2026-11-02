@@ -77,7 +77,10 @@
           SelectionMode="Single">
           <ListView.ItemTemplate>
             <DataTemplate x:DataType="vm:SettingsSectionItem">
-              <StackPanel Orientation="Horizontal" Spacing="12">
+              <StackPanel
+                AutomationProperties.Name="{x:Bind Label, Mode=OneWay}"
+                Orientation="Horizontal"
+                Spacing="12">
                 <FontIcon FontSize="16" Glyph="{x:Bind Glyph}" Opacity="0.85" />
                 <TextBlock Text="{x:Bind Label}" />
               </StackPanel>
@@ -113,7 +116,10 @@
           </ListView.ItemsPanel>
           <ListView.ItemTemplate>
             <DataTemplate x:DataType="vm:SettingsSectionItem">
-              <StackPanel Orientation="Horizontal" Spacing="8">
+              <StackPanel
+                AutomationProperties.Name="{x:Bind Label, Mode=OneWay}"
+                Orientation="Horizontal"
+                Spacing="8">
                 <FontIcon FontSize="16" Glyph="{x:Bind Glyph}" Opacity="0.85" />
                 <TextBlock Text="{x:Bind Label}" />
               </StackPanel>
