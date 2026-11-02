@@ -56,9 +56,12 @@
       full width. Overriding it here is the whole fix; nothing further down the tree can
       recover a height its ancestor never asked for.
     -->
+    <Grid x:Name="TabViewClipHost" Grid.Row="1" SizeChanged="OnTabViewClipHostSizeChanged">
+      <Grid.Clip>
+        <RectangleGeometry x:Name="TabViewClipGeometry" />
+      </Grid.Clip>
     <TabView
       x:Name="TabStrip"
-      Grid.Row="1"
       CanDragTabs="True"
       CanReorderTabs="True"
       IsAddTabButtonVisible="True"
@@ -139,6 +142,7 @@
         </DataTemplate>
       </TabView.TabItemTemplate>
     </TabView>
+    </Grid>
 
     <!--
       Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button

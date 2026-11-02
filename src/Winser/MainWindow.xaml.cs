@@ -489,6 +489,11 @@ public sealed partial class MainWindow : Window, IShellWindow
         VerticalTabsCard.Height = Math.Max(0, RootGrid.ActualHeight - topOffset - VerticalTabsPaneMargin);
     }
 
+    private void OnTabViewClipHostSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        TabViewClipGeometry.Rect = new Windows.Foundation.Rect(0, 0, e.NewSize.Width, e.NewSize.Height);
+    }
+
     private void ApplyTheme() =>
         ThemeHelper.Apply(RootGrid, AppWindow, AppServices.Settings.Current.Theme);
 
