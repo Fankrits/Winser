@@ -727,6 +727,8 @@ public sealed partial class MainWindow : Window, IShellWindow
         if (revealed)
         {
             UpdateCaptionInset();
+            UpdateTopBarInsets();
+            UpdateTopBarPassthroughRegions();
         }
     }
 
