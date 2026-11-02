@@ -176,30 +176,10 @@
         </Border.OpacityTransition>
         <Grid x:Name="TopActionBarGrid" Height="40" Padding="8,4" ColumnSpacing="4"
               Loaded="OnTopActionBarLayoutChanged" SizeChanged="OnTopActionBarSizeChanged">
-          <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="TopActionBarResponsiveStates">
-              <VisualState x:Name="TopActionBarCompact">
-                <VisualState.StateTriggers>
-                  <AdaptiveTrigger MinWindowWidth="0" />
-                </VisualState.StateTriggers>
-                <VisualState.Setters>
-                  <Setter Target="TopForwardButton.Visibility" Value="Collapsed" />
-                  <Setter Target="TopNewTabButton.Visibility" Value="Collapsed" />
-                  <Setter Target="TopPinButton.Visibility" Value="Collapsed" />
-                </VisualState.Setters>
-              </VisualState>
-              <VisualState x:Name="TopActionBarWide">
-                <VisualState.StateTriggers>
-                  <AdaptiveTrigger MinWindowWidth="760" />
-                </VisualState.StateTriggers>
-                <VisualState.Setters>
-                  <Setter Target="TopForwardButton.Visibility" Value="Visible" />
-                  <Setter Target="TopNewTabButton.Visibility" Value="Visible" />
-                  <Setter Target="TopPinButton.Visibility" Value="Visible" />
-                </VisualState.Setters>
-              </VisualState>
-            </VisualStateGroup>
-          </VisualStateManager.VisualStateGroups>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="32" />
+            <RowDefinition Height="0" />
+          </Grid.RowDefinitions>
           <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="TopLeftCaptionPadding" Width="0" />
             <ColumnDefinition Width="Auto" />

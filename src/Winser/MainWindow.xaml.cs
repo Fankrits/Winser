@@ -31,6 +31,8 @@ public sealed partial class MainWindow : Window, IShellWindow
     // and a band inside that is awkward to hit deliberately.
     private const double VerticalTabsHoverZoneWidth = 16;
     private const double VerticalTabsExpandedWidth = 240;
+    private const double CompactToolbarWidth = 760;
+    private const double StackedToolbarWidth = 520;
 
     /// <summary>
     /// Gap between the expanded pane and the window's top, left and bottom edges, so it reads as
@@ -40,15 +42,14 @@ public sealed partial class MainWindow : Window, IShellWindow
     private const double VerticalTabsPaneMargin = 8;
 
     /// <summary>
-    /// How often the cursor is checked against the zones below while it is actually moving.
-    /// Fast enough that reaching one feels immediate.
+    /// How often the cursor is checked against the vertical pane edge while it is moving.
     /// </summary>
     private const int CursorPollMs = 100;
 
     /// <summary>The slower rate once the cursor has held still for <see cref="CursorIdleAfterMs"/>.</summary>
     /// <remarks>
     /// <para>
-    /// The work per tick really is trivial - one GetCursorPos and two rectangle tests - but that
+    /// The work per tick really is trivial - one GetCursorPos and an edge check - but that
     /// was never the cost worth counting. A precise 10 Hz timer is 600 thread wake-ups a minute
     /// that Windows cannot coalesce, and it holds the CPU package out of its deeper sleep states
     /// for as long as a window is open, whether or not anyone is at the machine. That is charged
@@ -58,7 +59,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// A cursor that is not moving cannot be approaching a zone, which makes stillness a safe
     /// thing to back off on - and stillness is exactly the state a laptop left alone is in. The
     /// backing off costs nothing in feel because the tick that notices movement drops straight
-    /// back to <see cref="CursorPollMs"/> and evaluates both zones on that same tick, so a hand
+    /// back to <see cref="CursorPollMs"/> and evaluates the edge on that same tick, so a hand
     /// travelling to a screen edge - which takes a few hundred milliseconds of continuous motion -
     /// is caught in flight rather than on arrival.
     /// </para>
@@ -78,7 +79,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private bool _isWindowActive = true;
     private bool _isMinimized;
 
-    /// <summary>The one cursor poll both hover behaviours share; see the cursor watch section.</summary>
+    /// <summary>The cursor poll used for the vertical pane peek; see the cursor watch section.</summary>
     private DispatcherTimer? _cursorWatchTimer;
 
     /// <summary>Where the cursor was on the previous tick, for deciding whether it has moved.</summary>
@@ -131,6 +132,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         RootGrid.PreviewKeyDown += OnPreviewKeyDown;
         RootGrid.SizeChanged += (_, _) =>
         {
+            UpdateVerticalToolbarLayout();
             UpdateCaptionInset();
             UpdateTopBarInsets();
             UpdateTopBarPassthroughRegions();
@@ -410,13 +412,12 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </summary>
     private void UpdateChromeLayout()
     {
+        UpdateVerticalToolbarLayout();
         var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
 
         // The browser bar stays visible during normal browsing; fullscreen is the only state
         // that removes the title bar and its controls.
         SetCaptionRevealed(!ViewModel.IsFullScreen);
-        VerticalToolbarRow.Height = new GridLength(vertical ? TopActionBarGrid.Height : 0);
-
         // Nothing reserves layout space for vertical tabs: the expanded pane is a windowed Popup
         // floating over the page, and the hover trigger is the cursor's position rather than an
         // element (see the cursor watch section).
@@ -435,15 +436,31 @@ public sealed partial class MainWindow : Window, IShellWindow
             ? new Thickness(0, -TabStripHeight, 0, 0)
             : new Thickness(0);
 
-        // The vertical mode drag region overlays the same top strip TabStrip just vacated,
-        // rather than reserving it, so it needs to match that same height to look intentional.
-        // It spans the full width and needs no offset for the pane: the pane floats above it in
-        // its own popup and takes that input itself rather than competing for it.
-        VerticalModeDragRegion.Height = TabStripHeight;
-
+        // The vertical mode drag region covers the complete responsive toolbar, including its
+        // address row at narrow widths; the pane floats above it in its own popup.
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
         SetTitleBar(vertical ? VerticalModeDragRegion : CustomDragRegion);
+    }
+
+    private void UpdateVerticalToolbarLayout()
+    {
+        var width = RootGrid.ActualWidth;
+        var compact = width > 0 && width < CompactToolbarWidth;
+        var stacked = width > 0 && width < StackedToolbarWidth;
+
+        TopForwardButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        TopNewTabButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        TopPinButton.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        TopActionBarGrid.Height = stacked ? 72 : 40;
+        TopActionBarGrid.RowDefinitions[1].Height = new GridLength(stacked ? 32 : 0);
+        Grid.SetRow(TopAddressBox, stacked ? 1 : 0);
+        Grid.SetColumn(TopAddressBox, stacked ? 1 : 4);
+        Grid.SetColumnSpan(TopAddressBox, stacked ? 10 : 1);
+
+        var vertical = ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
+        VerticalToolbarRow.Height = new GridLength(vertical ? TopActionBarGrid.Height : 0);
+        VerticalModeDragRegion.Height = vertical ? TopActionBarGrid.Height : TabStripHeight;
     }
 
     /// <summary>
@@ -546,10 +563,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     // --------------------------------------------------------------- cursor watch
     //
-    // Two pieces of chrome appear on the cursor reaching an edge of the window: the vertical tabs
-    // pane at the left, and the caption buttons with the bar they sit on at the top right. Both
-    // are decided by polling GetCursorPos rather than by PointerEntered on an element parked
-    // there, and neither could work any other way.
+    // The pane peeks when the cursor reaches the window's left edge. The position is polled rather
+    // than received from an element, because a hit-test element there would cover page content.
     //
     // The pane tried the element approach first and failed twice over: it needed a band of the
     // window kept clear of WebView2 to receive pointer events at all, which was visible as a
@@ -557,20 +572,9 @@ public sealed partial class MainWindow : Window, IShellWindow
     // Popup, the strip and the pane were separate hit-test surfaces, so crossing between them
     // produced an exit and an enter with no ordering guarantee and the pane flickered.
     //
-    // The caption zone has no element to attach to even in principle. SetTitleBar hands that
-    // whole band to the system as a caption region, so it is non-client and raises no XAML
-    // pointer events at all, and the buttons inside it are drawn by WinUI rather than by
-    // anything in this tree. InputNonClientPointerSource reports non-client regions, but the
-    // ones it reports are those an app registers for buttons it draws itself.
-    //
-    // Polling has neither problem. Nothing can swallow a cursor position, so the page keeps every
-    // pixel including the ones under these zones, and every question is answered from the same
-    // tick - there is no hand-off between surfaces to race, so no debounce is needed either.
-
     /// <summary>
-    /// Runs the poll unless the window is minimized, which is the one state where neither zone
-    /// can be pointed at. Idempotent, so every caller that changes the window's shape can just
-    /// call it.
+    /// Runs the poll only while the vertical pane can peek. Idempotent, so every caller that
+    /// changes the window's shape can just call it.
     /// </summary>
     private void UpdateCursorWatch()
     {
