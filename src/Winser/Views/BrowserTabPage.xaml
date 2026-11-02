@@ -72,45 +72,14 @@
         Style="{StaticResource ToolbarIconButtonStyle}"
         ToolTipService.ToolTip="Home (Alt+Home)" />
 
-      <!--  Connection state, with the details behind a click like every other browser.  -->
-      <Button
-        Grid.Column="4"
-        Margin="6,0,0,0"
-        AutomationProperties.Name="Site information"
-        Content="{x:Bind ViewModel.SecurityGlyph, Mode=OneWay}"
-        Style="{StaticResource ToolbarIconButtonStyle}"
-        ToolTipService.ToolTip="{x:Bind ViewModel.SecurityTooltip, Mode=OneWay}">
-        <Button.Flyout>
-          <Flyout>
-            <StackPanel MaxWidth="320" Spacing="6">
-              <TextBlock
-                Style="{StaticResource BodyStrongTextBlockStyle}"
-                Text="{x:Bind ViewModel.HostLabel, Mode=OneWay}"
-                TextTrimming="CharacterEllipsis" />
-              <TextBlock
-                Opacity="0.8"
-                Text="{x:Bind ViewModel.SecurityTooltip, Mode=OneWay}"
-                TextWrapping="Wrap" />
-              <TextBlock
-                FontFamily="Consolas"
-                FontSize="12"
-                Opacity="0.6"
-                Text="{x:Bind ViewModel.Url, Mode=OneWay}"
-                TextWrapping="Wrap" />
-              <Button
-                Margin="0,4,0,0"
-                Command="{x:Bind ViewModel.CopyLinkCommand}"
-                Content="Copy address" />
-            </StackPanel>
-          </Flyout>
-        </Button.Flyout>
-      </Button>
+      <controls:BrowserSiteInfoButton Grid.Column="4" Margin="6,0,0,0" Tab="{x:Bind ViewModel, Mode=OneWay}" />
 
       <AutoSuggestBox
         x:Name="AddressBox"
         Grid.Column="5"
         Height="32"
         Margin="4,0"
+        AutomationProperties.Name="Search or enter web address"
         VerticalAlignment="Center"
         CornerRadius="16"
         ItemsSource="{x:Bind ViewModel.Suggestions, Mode=OneWay}"
@@ -118,6 +87,7 @@
         Text="{x:Bind ViewModel.AddressText, Mode=OneWay}"
         TextMemberPath="Text"
         GotFocus="OnAddressGotFocus"
+        KeyDown="OnAddressKeyDown"
         LostFocus="OnAddressLostFocus"
         QuerySubmitted="OnAddressQuerySubmitted"
         TextChanged="OnAddressTextChanged">
@@ -244,109 +214,7 @@
           Visibility="{x:Bind ViewModel.Shell.HasActiveDownloads, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
       </Grid>
 
-      <Button
-        Grid.Column="10"
-        AutomationProperties.Name="Settings and more"
-        Content="&#xE712;"
-        Style="{StaticResource ToolbarIconButtonStyle}"
-        ToolTipService.ToolTip="Settings and more">
-        <Button.Flyout>
-          <MenuFlyout Placement="BottomEdgeAlignedRight">
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.AddTabCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+T"
-              Text="New tab">
-              <MenuFlyoutItem.Icon>
-                <FontIcon Glyph="&#xE710;" />
-              </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.NewWindowCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+N"
-              Text="New window" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.NewPrivateWindowCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+Shift+N"
-              Text="New InPrivate window">
-              <MenuFlyoutItem.Icon>
-                <FontIcon Glyph="&#xE727;" />
-              </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.ZoomInCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl++"
-              Text="Zoom in" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.ZoomOutCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+-"
-              Text="Zoom out" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.ResetZoomCommand}"
-              Text="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.ToggleFullScreenCommand}"
-              KeyboardAcceleratorTextOverride="F11"
-              Text="Full screen" />
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.OpenFindCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+F"
-              Text="Find on page" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.PrintCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+P"
-              Text="Print" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.CopyLinkCommand}"
-              Text="Copy page address" />
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.OpenBookmarksCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+Shift+O"
-              Text="Bookmarks" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.OpenHistoryCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+H"
-              Text="History" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.OpenDownloadsCommand}"
-              KeyboardAcceleratorTextOverride="Ctrl+J"
-              Text="Downloads" />
-            <ToggleMenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.ToggleBookmarksBarCommand}"
-              IsChecked="{x:Bind ViewModel.Shell.ShowBookmarksBar, Mode=OneWay}"
-              KeyboardAcceleratorTextOverride="Ctrl+Shift+B"
-              Text="Show bookmarks bar" />
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.OpenDevToolsCommand}"
-              KeyboardAcceleratorTextOverride="F12"
-              Text="Developer tools" />
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.OpenSettingsCommand}"
-              Text="Settings">
-              <MenuFlyoutItem.Icon>
-                <FontIcon Glyph="&#xE713;" />
-              </MenuFlyoutItem.Icon>
-            </MenuFlyoutItem>
-
-            <MenuFlyoutSeparator />
-
-            <MenuFlyoutItem
-              Command="{x:Bind ViewModel.Shell.CloseWindowCommand}"
-              Text="Close window" />
-          </MenuFlyout>
-        </Button.Flyout>
-      </Button>
+      <controls:BrowserMenuButton Grid.Column="10" Tab="{x:Bind ViewModel, Mode=OneWay}" />
     </Grid>
 
     <!--  =========================== bookmarks bar ===========================  -->
@@ -596,6 +464,7 @@
             Text="{x:Bind ViewModel.FindStatus, Mode=OneWay}"
             VerticalAlignment="Center" />
           <ToggleButton
+            AutomationProperties.Name="Match case"
             Content="Aa"
             FontFamily="{ThemeResource ContentControlThemeFontFamily}"
             FontSize="12"
@@ -603,16 +472,19 @@
             Style="{StaticResource ToolbarToggleButtonStyle}"
             ToolTipService.ToolTip="Match case" />
           <Button
+            AutomationProperties.Name="Previous match"
             Command="{x:Bind ViewModel.FindPreviousCommand}"
             Content="&#xE70E;"
             Style="{StaticResource ToolbarIconButtonStyle}"
             ToolTipService.ToolTip="Previous match (Shift+Enter)" />
           <Button
+            AutomationProperties.Name="Next match"
             Command="{x:Bind ViewModel.FindNextCommand}"
             Content="&#xE70D;"
             Style="{StaticResource ToolbarIconButtonStyle}"
             ToolTipService.ToolTip="Next match (Enter)" />
           <Button
+            AutomationProperties.Name="Close find"
             Command="{x:Bind ViewModel.CloseFindCommand}"
             Content="&#xE711;"
             Style="{StaticResource ToolbarIconButtonStyle}"

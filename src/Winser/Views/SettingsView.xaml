@@ -11,12 +11,48 @@
   <Grid Background="{ThemeResource WinserContentBackgroundBrush}">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="232" />
-      <ColumnDefinition Width="*" MinWidth="480" />
+      <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup>
+        <VisualState x:Name="Compact">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="0" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="SettingsSidebar.Visibility" Value="Collapsed" />
+            <Setter Target="CompactNavigation.Visibility" Value="Visible" />
+            <Setter Target="ContentScroller.(Grid.Row)" Value="1" />
+            <Setter Target="ContentScroller.(Grid.Column)" Value="0" />
+            <Setter Target="ContentScroller.(Grid.ColumnSpan)" Value="2" />
+            <Setter Target="ContentScroller.(Grid.RowSpan)" Value="1" />
+          </VisualState.Setters>
+        </VisualState>
+        <VisualState x:Name="Standard">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="760" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="SettingsSidebar.Visibility" Value="Visible" />
+            <Setter Target="CompactNavigation.Visibility" Value="Collapsed" />
+            <Setter Target="ContentScroller.(Grid.Row)" Value="0" />
+            <Setter Target="ContentScroller.(Grid.Column)" Value="1" />
+            <Setter Target="ContentScroller.(Grid.ColumnSpan)" Value="1" />
+            <Setter Target="ContentScroller.(Grid.RowSpan)" Value="2" />
+          </VisualState.Setters>
+        </VisualState>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
 
     <!--  ============================== sidebar ==============================  -->
     <Border
+      x:Name="SettingsSidebar"
       Grid.Column="0"
+      Grid.RowSpan="2"
       Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
       BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
       BorderThickness="0,0,1,0">
@@ -51,8 +87,44 @@
       </StackPanel>
     </Border>
 
+    <StackPanel
+      x:Name="CompactNavigation"
+      Grid.Row="0"
+      Grid.ColumnSpan="2"
+      Padding="16,8,16,0"
+      Visibility="Collapsed">
+      <TextBlock Margin="0,0,0,4" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Settings" />
+      <ScrollViewer
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Auto"
+        VerticalScrollBarVisibility="Disabled"
+        VerticalScrollMode="Disabled">
+        <ListView
+          x:Name="CompactSectionList"
+          Background="Transparent"
+          HorizontalContentAlignment="Left"
+          ItemContainerStyle="{StaticResource SidebarListItemStyle}"
+          ItemsSource="{x:Bind ViewModel.Sections}"
+          SelectedIndex="0"
+          SelectionChanged="OnSectionSelectionChanged"
+          SelectionMode="Single">
+          <ListView.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+          </ListView.ItemsPanel>
+          <ListView.ItemTemplate>
+            <DataTemplate x:DataType="vm:SettingsSectionItem">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <FontIcon FontSize="16" Glyph="{x:Bind Glyph}" Opacity="0.85" />
+                <TextBlock Text="{x:Bind Label}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListView.ItemTemplate>
+        </ListView>
+      </ScrollViewer>
+    </StackPanel>
+
     <!--  ============================== content ===============================  -->
-    <ScrollViewer x:Name="ContentScroller" Grid.Column="1" Padding="0,0,0,48">
+    <ScrollViewer x:Name="ContentScroller" Grid.RowSpan="2" Grid.Column="1" Padding="0,0,0,48">
       <StackPanel
         MaxWidth="720"
         Margin="32,28,32,0"

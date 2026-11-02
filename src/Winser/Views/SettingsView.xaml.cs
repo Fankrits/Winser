@@ -31,6 +31,15 @@ public sealed partial class SettingsView : UserControl
         if ((sender as ListView)?.SelectedItem is SettingsSectionItem item)
         {
             ViewModel.SelectedSection = item.Section;
+            var selectedIndex = (sender as ListView)?.SelectedIndex ?? -1;
+            if (sender == SectionList && CompactSectionList.SelectedIndex != selectedIndex)
+            {
+                CompactSectionList.SelectedIndex = selectedIndex;
+            }
+            else if (sender == CompactSectionList && SectionList.SelectedIndex != selectedIndex)
+            {
+                SectionList.SelectedIndex = selectedIndex;
+            }
             ContentScroller.ChangeView(null, 0, null, true);
         }
     }

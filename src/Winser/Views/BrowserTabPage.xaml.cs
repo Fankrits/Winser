@@ -40,6 +40,11 @@ public sealed partial class BrowserTabPage : UserControl
     /// <summary>Focuses the address bar and selects what is in it, the way Ctrl+L should.</summary>
     public void FocusAddress()
     {
+        if (ViewModel?.Shell.UseVerticalTabs == true)
+        {
+            return;
+        }
+
         AddressBox.Focus(FocusState.Programmatic);
         AddressBox.FindDescendant<TextBox>()?.SelectAll();
     }
@@ -74,7 +79,7 @@ public sealed partial class BrowserTabPage : UserControl
 
         // Every tab's page loads, not just the visible one, so a background new tab must not
         // steal the caret from whatever the user is looking at.
-        if (ViewModel is { IsNewTabPage: true } tab && ReferenceEquals(tab.Shell.SelectedTab, tab))
+        if (ViewModel is { IsNewTabPage: true } tab && !tab.Shell.UseVerticalTabs && ReferenceEquals(tab.Shell.SelectedTab, tab))
         {
             FocusAddress();
         }
@@ -154,6 +159,16 @@ public sealed partial class BrowserTabPage : UserControl
         tab.IsAddressFocused = false;
         tab.ClearSuggestions();
         WebContent?.FocusContent();
+    }
+
+    private void OnAddressKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape && ViewModel is { } tab)
+        {
+            tab.ClearSuggestions();
+            AddressBox.Text = UrlHelper.ForDisplay(tab.Url);
+            e.Handled = true;
+        }
     }
 
     private void OnAddressGotFocus(object sender, RoutedEventArgs e)
