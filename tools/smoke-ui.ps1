@@ -282,7 +282,10 @@ Bun.serve({
         for ($i = 0; $i -lt 40; $i++) {
             $bounds = $main.Current.BoundingRectangle
             if ($bounds.Width -le ($width + 20) -and $bounds.Width -ge ($width - 20) -and
-                $bounds.Height -le ($height + 20) -and $bounds.Height -ge ($height - 20)) { return }
+                $bounds.Height -le ($height + 20) -and $bounds.Height -ge ($height - 20)) {
+                Ensure-AppForeground
+                return
+            }
             Start-Sleep -Milliseconds 250
         }
         throw "Window did not resize to ${width}x${height}: $($main.Current.BoundingRectangle)"
@@ -496,7 +499,7 @@ Bun.serve({
     }
     Send-AppKeys '{ESC}'
     Wait-UiGone 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true
-    Wait-Focused 'Address and search' | Out-Null
+    Wait-Focused 'Address and search' ([Windows.Automation.ControlType]::Edit) | Out-Null
 
     # Pinning must keep the pane open after the pointer exits.
     $menu = Find-Ui 'Settings and more' ([Windows.Automation.ControlType]::Button)
@@ -518,7 +521,7 @@ Bun.serve({
     if ($narrowBounds.Width -lt 180 -or $narrowBounds.IsEmpty -or $narrowAddress.Current.IsOffscreen) {
         throw "Address field is not usable at 480px window width: $narrowBounds"
     }
-    foreach ($name in @('Forward', 'New tab', 'Pin the tab pane open')) {
+    foreach ($name in @('Forward', 'New tab', 'Pin the tab pane open', 'Unpin the tab pane')) {
         if ($null -ne (Find-Ui $name ([Windows.Automation.ControlType]::Button) $true)) {
             throw "Compact toolbar control '$name' remained visible at 480px."
         }
@@ -544,6 +547,7 @@ Bun.serve({
     $settingsItem = Wait-Ui 'Settings' ([Windows.Automation.ControlType]::MenuItem) $true
     Invoke-Ui $settingsItem
     Wait-Ui 'Appearance' ([Windows.Automation.ControlType]::Text) $true | Out-Null
+    Wait-Setting 'theme' 0
     $themeCombo = Wait-Ui 'Theme' ([Windows.Automation.ControlType]::ComboBox) $true
     $expand = $themeCombo.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern)
     $expand.Expand()
