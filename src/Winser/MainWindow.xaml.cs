@@ -898,6 +898,19 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void OnVerticalTabListLostFocus(object sender, RoutedEventArgs e) =>
         DispatcherQueue.TryEnqueue(() => ViewModel.IsVerticalTabsListFocused = IsFocusWithin(VerticalTabList));
 
+    private void OnVerticalTabListKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            _pointerOverVerticalTabsCard = false;
+            ViewModel.IsVerticalTabsPointerOver = false;
+            ViewModel.IsVerticalTabsManuallyRevealed = false;
+            ViewModel.IsVerticalTabsListFocused = false;
+            FocusVisibleAddressBar();
+        }
+    }
+
     private bool IsFocusWithin(DependencyObject element)
     {
         for (var focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot) as DependencyObject;
@@ -954,6 +967,16 @@ public sealed partial class MainWindow : Window, IShellWindow
         tab.IsAddressFocused = false;
         tab.ClearSuggestions();
         tab.FocusWebContent();
+    }
+
+    private void OnVerticalAddressKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Escape && ViewModel.SelectedTab is { } tab && sender is AutoSuggestBox addressBox)
+        {
+            tab.ClearSuggestions();
+            addressBox.Text = UrlHelper.ForDisplay(tab.Url);
+            e.Handled = true;
+        }
     }
 
     private void OnVerticalAddressGotFocus(object sender, RoutedEventArgs e)

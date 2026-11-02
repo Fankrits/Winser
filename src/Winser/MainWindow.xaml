@@ -200,12 +200,13 @@
                   Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
                   Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
           <AutoSuggestBox x:Name="TopAddressBox" Grid.Column="4" Height="32" CornerRadius="16"
+                          AutomationProperties.Name="Address and search"
                           ItemsSource="{x:Bind ViewModel.SelectedTab.Suggestions, Mode=OneWay}"
                           PlaceholderText="Search or enter web address"
                           Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
                           TextMemberPath="Text" GotFocus="OnVerticalAddressGotFocus"
                           LostFocus="OnVerticalAddressLostFocus" QuerySubmitted="OnVerticalAddressQuerySubmitted"
-                          TextChanged="OnVerticalAddressTextChanged" />
+                          TextChanged="OnVerticalAddressTextChanged" KeyDown="OnVerticalAddressKeyDown" />
           <controls:BrowserSiteInfoButton x:Name="TopSiteInfoButton" Grid.Column="5"
                                           Tab="{x:Bind ViewModel.SelectedTab, Mode=OneWay}" />
           <Button x:Name="TopNewTabButton" Grid.Column="6" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
@@ -316,6 +317,7 @@
           SelectionChanged="OnVerticalTabSelectionChanged"
           GotFocus="OnVerticalTabListGotFocus"
           LostFocus="OnVerticalTabListLostFocus"
+          KeyDown="OnVerticalTabListKeyDown"
           SelectionMode="Single">
           <!--
             A soft translucent pill for the selected row instead of ListViewItem's default
