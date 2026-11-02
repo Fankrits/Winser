@@ -200,7 +200,11 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         const int DwmwaBorderColor = 34;
         var color = -2;
-        _ = DwmSetWindowAttribute(WindowHandle, DwmwaBorderColor, ref color, sizeof(int));
+        var result = DwmSetWindowAttribute(WindowHandle, DwmwaBorderColor, ref color, sizeof(int));
+        if (result < 0)
+        {
+            DiagnosticLog.Write($"window border: DwmSetWindowAttribute failed with HRESULT 0x{result:X8}");
+        }
     }
 
     public void RefreshTabChrome() => UpdateChromeLayout();
@@ -233,6 +237,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void OnFirstActivated(object sender, WindowActivatedEventArgs args)
     {
         Activated -= OnFirstActivated;
+        HideWindowBorder();
         UpdateCaptionInset();
 
         // Winser starts with the title bar collapsed, so an inset and height of 0 here is the
@@ -263,6 +268,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     {
         if (args.DidPresenterChange)
         {
+            HideWindowBorder();
             UpdateMemoryPressure();
         }
     }
