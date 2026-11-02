@@ -122,7 +122,7 @@
           <TabViewItem
             Header="{x:Bind Title, Mode=OneWay}"
             IconSource="{x:Bind TabIcon, Mode=OneWay}"
-            IsTabStop="{x:Bind ViewModel.IsToolbarVisible, Mode=OneWay}"
+            IsTabStop="{x:Bind Shell.IsToolbarVisible, Mode=OneWay}"
             ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
 
             <TabViewItem.ContextFlyout>
