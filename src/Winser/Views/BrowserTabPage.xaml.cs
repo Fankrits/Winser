@@ -45,8 +45,15 @@ public sealed partial class BrowserTabPage : UserControl
             return;
         }
 
-        AddressBox.Focus(FocusState.Programmatic);
-        AddressBox.FindDescendant<TextBox>()?.SelectAll();
+        AddressBox.ApplyTemplate();
+        if (AddressBox.FindDescendant<TextBox>() is { } editor && editor.Focus(FocusState.Programmatic))
+        {
+            editor.SelectAll();
+        }
+        else
+        {
+            AddressBox.Focus(FocusState.Programmatic);
+        }
     }
 
     // -------------------------------------------------------------------- lifecycle
