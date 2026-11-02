@@ -183,13 +183,13 @@
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
-          <Button Grid.Column="0" AutomationProperties.Name="Back"
+          <Button x:Name="TopBackButton" Grid.Column="0" AutomationProperties.Name="Back"
                   Command="{x:Bind ViewModel.SelectedTab.GoBackCommand, Mode=OneWay}"
                   Content="&#xE72B;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="Back" />
-          <Button Grid.Column="1" AutomationProperties.Name="Forward"
+          <Button x:Name="TopForwardButton" Grid.Column="1" AutomationProperties.Name="Forward"
                   Command="{x:Bind ViewModel.SelectedTab.GoForwardCommand, Mode=OneWay}"
                   Content="&#xE72A;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="Forward" />
-          <Button Grid.Column="2" AutomationProperties.Name="Reload"
+          <Button x:Name="TopReloadButton" Grid.Column="2" AutomationProperties.Name="Reload"
                   Command="{x:Bind ViewModel.SelectedTab.ReloadOrStopCommand, Mode=OneWay}"
                   Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
                   Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
@@ -200,9 +200,9 @@
                           TextMemberPath="Text" GotFocus="OnVerticalAddressGotFocus"
                           LostFocus="OnVerticalAddressLostFocus" QuerySubmitted="OnVerticalAddressQuerySubmitted"
                           TextChanged="OnVerticalAddressTextChanged" />
-          <Button Grid.Column="4" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
+          <Button x:Name="TopNewTabButton" Grid.Column="4" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
                   Content="&#xE710;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="New tab" />
-          <Button Grid.Column="5" AutomationProperties.Name="Pin vertical tabs"
+          <Button x:Name="TopPinButton" Grid.Column="5" AutomationProperties.Name="Pin vertical tabs"
                   Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
                   Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}" Style="{StaticResource ToolbarIconButtonStyle}"
                   ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}" />

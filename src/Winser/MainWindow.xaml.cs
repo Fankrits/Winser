@@ -700,7 +700,15 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// A window that is genuinely behind another one has its corner covered by that window, so
     /// restoring its own buttons under there costs nothing and shows nothing.
     /// </remarks>
-    private void UpdateCaptionReveal() => SetCaptionRevealed(IsCursorInCaptionZone());
+    private void UpdateCaptionReveal() => SetCaptionRevealed(IsCursorInCaptionZone() || IsTopActionBarFocused());
+
+    private bool IsTopActionBarFocused() =>
+        TopAddressBox.FocusState != FocusState.Unfocused ||
+        TopBackButton.FocusState != FocusState.Unfocused ||
+        TopForwardButton.FocusState != FocusState.Unfocused ||
+        TopReloadButton.FocusState != FocusState.Unfocused ||
+        TopNewTabButton.FocusState != FocusState.Unfocused ||
+        TopPinButton.FocusState != FocusState.Unfocused;
 
     private void SetCaptionRevealed(bool revealed)
     {
@@ -743,6 +751,39 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         TopChromeTint.Opacity = _isCaptionRevealed ? 1 : 0;
+        TopChromeTint.IsHitTestVisible = _isCaptionRevealed;
+        TopAddressBox.IsTabStop = _isCaptionRevealed;
+        TopBackButton.IsTabStop = _isCaptionRevealed;
+        TopForwardButton.IsTabStop = _isCaptionRevealed;
+        TopReloadButton.IsTabStop = _isCaptionRevealed;
+        TopNewTabButton.IsTabStop = _isCaptionRevealed;
+        TopPinButton.IsTabStop = _isCaptionRevealed;
+        UpdateTopBarPassthroughRegions();
+    }
+
+    private void UpdateTopBarPassthroughRegions()
+    {
+        if (ViewModel.IsFullScreen || RootGrid.XamlRoot is not { } xamlRoot)
+        {
+            return;
+        }
+
+        var scale = xamlRoot.RasterizationScale;
+        var regions = new FrameworkElement[] { TopAddressBox, TopBackButton, TopForwardButton, TopReloadButton, TopNewTabButton, TopPinButton }
+            .Where(element => element.Visibility == Visibility.Visible)
+            .Select(element =>
+            {
+                var bounds = element.TransformToVisual(null).TransformBounds(
+                    new Windows.Foundation.Rect(0, 0, element.ActualWidth, element.ActualHeight));
+                return new RectInt32(
+                    (int)Math.Round(bounds.X * scale),
+                    (int)Math.Round(bounds.Y * scale),
+                    (int)Math.Round(bounds.Width * scale),
+                    (int)Math.Round(bounds.Height * scale));
+            })
+            .ToArray();
+        InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+            .SetRegionRects(NonClientRegionKind.Passthrough, regions);
     }
 
     private bool IsCursorInCaptionZone()
