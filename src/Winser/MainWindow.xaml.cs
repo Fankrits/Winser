@@ -476,14 +476,17 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         VerticalTabsFlyout.HorizontalOffset = VerticalTabsPaneMargin;
-        VerticalTabsFlyout.VerticalOffset = VerticalTabsPaneMargin;
+        var topOffset = VerticalTabsPaneMargin + (ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen
+            ? VerticalToolbarRow.ActualHeight
+            : 0);
+        VerticalTabsFlyout.VerticalOffset = topOffset;
 
         // Clamped to the window's own size: on a narrow or short window a fixed 240px card would
         // otherwise hang off the edge rather than shrinking to fit inside it.
         VerticalTabsCard.Width = Math.Min(
             VerticalTabsExpandedWidth,
             Math.Max(0, RootGrid.ActualWidth - (VerticalTabsPaneMargin * 2)));
-        VerticalTabsCard.Height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
+        VerticalTabsCard.Height = Math.Max(0, RootGrid.ActualHeight - topOffset - VerticalTabsPaneMargin);
     }
 
     private void ApplyTheme() =>
