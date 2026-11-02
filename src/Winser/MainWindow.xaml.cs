@@ -477,7 +477,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         VerticalTabsFlyout.HorizontalOffset = VerticalTabsPaneMargin;
         var topOffset = VerticalTabsPaneMargin + (ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen
-            ? VerticalToolbarRow.ActualHeight
+            ? VerticalToolbarRow.Height.Value
             : 0);
         VerticalTabsFlyout.VerticalOffset = topOffset;
 
