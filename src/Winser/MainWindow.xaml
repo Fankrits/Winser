@@ -406,7 +406,6 @@
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Grid.ContextFlyout>
@@ -431,13 +430,6 @@
                   Text="{x:Bind Title, Mode=OneWay}"
                   TextTrimming="CharacterEllipsis"
                   VerticalAlignment="Center"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
-                <Button
-                  Grid.Column="2"
-                  Command="{x:Bind CloseCommand}"
-                  Content="&#xE711;"
-                  Style="{StaticResource ToolbarIconButtonStyle}"
-                  ToolTipService.ToolTip="Close tab"
                   Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
               </Grid>
             </DataTemplate>
