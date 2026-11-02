@@ -217,7 +217,12 @@ public sealed partial class MainWindow : Window, IShellWindow
         if (ViewModel.UseVerticalTabs)
         {
             TopAddressBox.Focus(FocusState.Programmatic);
-            TopAddressBox.FindDescendant<TextBox>()?.SelectAll();
+            TopAddressBox.ApplyTemplate();
+            if (TopAddressBox.FindDescendant<TextBox>() is { } addressTextBox)
+            {
+                addressTextBox.Focus(FocusState.Programmatic);
+                addressTextBox.SelectAll();
+            }
         }
         else
         {
