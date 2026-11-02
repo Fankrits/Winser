@@ -122,8 +122,7 @@ msbuild Winser.sln -p:Configuration=Release -p:Platform=x64
 
 ## UI smoke verification
 
-After building, run the native Windows UI smoke check with PowerShell and the Python launcher
-installed:
+After building, run the native Windows UI smoke check with PowerShell and Python installed:
 
 ```powershell
 .\tools\smoke-ui.ps1 -ExePath .\src\Winser\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Winser.exe
@@ -132,7 +131,8 @@ installed:
 It creates a fresh profile under ignored `artifacts/`, navigates to a local test page, checks the
 site information and menu controls, and exercises vertical-tab focus, scrolling, and pin behavior.
 The temporary profile is removed after the app closes; pass `-KeepProfile` to retain it for
-inspection. For other isolated runs, set `WINSER_USER_DATA_FOLDER` in the process environment.
+inspection. A window screenshot is retained under `artifacts/ux-review/`. For other isolated runs,
+set `WINSER_USER_DATA_FOLDER` in the process environment.
 An unset or blank value keeps the normal `%LOCALAPPDATA%\Winser` location.
 
 ## Creating a release

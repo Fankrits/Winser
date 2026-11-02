@@ -7,7 +7,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $exe = (Resolve-Path -LiteralPath $ExePath).Path
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$profileRoot = Join-Path $repo (Join-Path 'artifacts' ("ui-smoke-{0}" -f [guid]::NewGuid().ToString('N')))
+$artifactsRoot = [IO.Path]::GetFullPath((Join-Path $repo 'artifacts'))
+$profileRoot = [IO.Path]::GetFullPath((Join-Path $artifactsRoot ("ui-smoke-{0}" -f [guid]::NewGuid().ToString('N'))))
+$screenshotRoot = Join-Path $artifactsRoot 'ux-review'
+$screenshotPath = Join-Path $screenshotRoot ("winser-ui-smoke-{0}.png" -f [guid]::NewGuid().ToString('N'))
 $normalRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'Winser'))
 $serverRoot = Join-Path $profileRoot 'http'
 $serverProcess = $null
@@ -17,8 +20,14 @@ if ($profileRoot.StartsWith($normalRoot, [StringComparison]::OrdinalIgnoreCase) 
     $normalRoot.StartsWith($profileRoot, [StringComparison]::OrdinalIgnoreCase)) {
     throw "Refusing to use a smoke profile that overlaps the normal profile: $profileRoot"
 }
+$artifactsPrefix = $artifactsRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+if (-not $profileRoot.StartsWith($artifactsPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to use a smoke profile outside artifacts: $profileRoot"
+}
+if (Test-Path -LiteralPath $profileRoot) { throw "Refusing to reuse an existing smoke profile: $profileRoot" }
 
 New-Item -ItemType Directory -Path $profileRoot, (Join-Path $profileRoot 'Data'), $serverRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $screenshotRoot -Force | Out-Null
 @{
     theme = 0
     startup = 0
@@ -36,13 +45,31 @@ try {
     Add-Type -AssemblyName UIAutomationClient
     Add-Type -AssemblyName UIAutomationTypes
     Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+
+    function Save-WindowScreenshot($element, $path) {
+        $bounds = $element.Current.BoundingRectangle
+        $left = [Math]::Max(0, [int][Math]::Floor($bounds.Left))
+        $top = [Math]::Max(0, [int][Math]::Floor($bounds.Top))
+        $width = [int][Math]::Ceiling($bounds.Width)
+        $height = [int][Math]::Ceiling($bounds.Height)
+        if ($width -le 0 -or $height -le 0) { return }
+        $bitmap = [Drawing.Bitmap]::new($width, $height)
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        try {
+            $graphics.CopyFromScreen($left, $top, 0, 0, [Drawing.Size]::new($width, $height))
+            $bitmap.Save($path, [Drawing.Imaging.ImageFormat]::Png)
+        }
+        finally { $graphics.Dispose(); $bitmap.Dispose() }
+    }
 
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
     $port = ([Net.IPEndPoint] $listener.LocalEndpoint).Port
     $listener.Stop()
-    $python = (Get-Command py -ErrorAction Stop).Source
-    $serverArgs = "-3 -m http.server $port --bind 127.0.0.1 --directory `"$serverRoot`""
+    $python = (Get-Command python.exe -ErrorAction Stop | Where-Object { $_.Source -notlike '*WindowsApps*' } | Select-Object -First 1).Source
+    if (-not $python) { throw 'A direct python.exe installation is required for the UI smoke server.' }
+    $serverArgs = "-m http.server $port --bind 127.0.0.1 --directory `"$serverRoot`""
     $serverProcess = Start-Process -FilePath $python -ArgumentList $serverArgs -PassThru -WindowStyle Hidden
     $url = "http://127.0.0.1:$port/"
     $ready = $false
@@ -55,7 +82,7 @@ try {
     $prior = $env:WINSER_USER_DATA_FOLDER
     try {
         $env:WINSER_USER_DATA_FOLDER = $profileRoot
-        $app = Start-Process -FilePath $exe -PassThru
+        $app = Start-Process -FilePath $exe -PassThru -WindowStyle Normal
     }
     finally {
         if ($null -eq $prior) { Remove-Item Env:WINSER_USER_DATA_FOLDER -ErrorAction SilentlyContinue }
@@ -74,6 +101,8 @@ try {
         else { Start-Sleep -Milliseconds 250 }
     }
     if ($null -eq $main) { throw 'Winser did not create a main window.' }
+    $main.GetCurrentPattern([Windows.Automation.TransformPattern]::Pattern).Resize(800, 420)
+    Start-Sleep -Milliseconds 500
 
     function Find-Ui($name, $type = $null, $visibleOnly = $false) {
         $nameCondition = [Windows.Automation.PropertyCondition]::new(
@@ -118,12 +147,25 @@ try {
     # Exercise navigation and the site info/menu controls using only the disposable profile.
     $address.SetFocus()
     [Windows.Forms.SendKeys]::SendWait('^a')
-    [Windows.Forms.SendKeys]::SendWait($url)
+    $bareAddress = "127.0.0.1:$port/"
+    [Windows.Forms.SendKeys]::SendWait($bareAddress)
+    $enteredValue = $address.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
+    if ($enteredValue -ne $bareAddress) { throw "Address box did not contain the typed bare host: $enteredValue" }
     [Windows.Forms.SendKeys]::SendWait('{ENTER}')
     Wait-Ui 'Site information' ([Windows.Automation.ControlType]::Button) | Out-Null
+
+    # The tab title confirms WebView2 loaded the loopback page, not just the address input.
+    $showTabs = Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)
+    Press-Enter $showTabs
+    Wait-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true | Out-Null
+    Wait-Ui 'Winser smoke page' ([Windows.Automation.ControlType]::ListItem) $true | Out-Null
+    $hideTabs = Wait-Ui 'Hide tabs' ([Windows.Automation.ControlType]::Button)
+    Press-Enter $hideTabs
+
     $siteInfo = Find-Ui 'Site information' ([Windows.Automation.ControlType]::Button)
     Press-Enter $siteInfo
-    Wait-Ui "127.0.0.1:$port" $null $true | Out-Null
+    Wait-Ui '127.0.0.1' $null $true | Out-Null
+    Wait-Ui $url $null $true | Out-Null
     [Windows.Forms.SendKeys]::SendWait('{ESC}')
 
     $menu = Wait-Ui 'Settings and more' ([Windows.Automation.ControlType]::Button)
@@ -132,7 +174,7 @@ try {
     [Windows.Forms.SendKeys]::SendWait('{ESC}')
 
     # Give the pane enough tabs to scroll, then verify keyboard selection stays visible.
-    for ($i = 0; $i -lt 7; $i++) { [Windows.Forms.SendKeys]::SendWait('^t'); Start-Sleep -Milliseconds 150 }
+    for ($i = 0; $i -lt 12; $i++) { [Windows.Forms.SendKeys]::SendWait('^t'); Start-Sleep -Milliseconds 150 }
 
     # Open the unpinned pane, verify focus keeps it open after pointer exit, then verify focus-out closes it.
     Press-Enter $showTabs
@@ -143,13 +185,18 @@ try {
         [Windows.Automation.PropertyCondition]::new(
             [Windows.Automation.AutomationElement]::ControlTypeProperty,
             [Windows.Automation.ControlType]::ListItem))
-    if ($listItems.Count -lt 8) { throw "Expected at least 8 tabs in the smoke list, found $($listItems.Count)." }
+    if ($listItems.Count -lt 8) { throw "Expected at least 8 visible tabs in the smoke list, found $($listItems.Count)." }
     $list.SetFocus()
     [Windows.Forms.SendKeys]::SendWait('{END}')
     Start-Sleep -Milliseconds 400
     $selected = $list.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection()
     if ($selected.Count -eq 0 -or $selected[0].Current.IsOffscreen) {
         throw 'Keyboard selection did not scroll the selected tab into view.'
+    }
+    $listBounds = $list.Current.BoundingRectangle
+    $selectedBounds = $selected[0].Current.BoundingRectangle
+    if ($selectedBounds.Top -lt $listBounds.Top -or $selectedBounds.Bottom -gt $listBounds.Bottom) {
+        throw 'The keyboard-selected tab is not inside the visible list viewport.'
     }
     [Windows.Forms.Cursor]::Position = [Drawing.Point]::new(
         [Windows.Forms.Screen]::PrimaryScreen.Bounds.Right - 10,
@@ -158,16 +205,30 @@ try {
     if ($null -eq (Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true)) {
         throw 'The vertical tab pane closed while its list retained keyboard focus.'
     }
-    $menu.SetFocus()
-    Start-Sleep -Milliseconds 800
-    if ($null -eq (Find-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button))) {
-        throw 'The pane action did not return to Show tabs after focus and pointer left.'
+    [Windows.Forms.SendKeys]::SendWait('{DOWN}')
+    [Windows.Forms.SendKeys]::SendWait('{UP}')
+    Start-Sleep -Milliseconds 300
+    if ($null -eq (Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true)) {
+        throw 'Keyboard arrow navigation closed the focused vertical tab pane.'
+    }
+    $leftByTab = $false
+    for ($i = 0; $i -lt 6; $i++) {
+        [Windows.Forms.SendKeys]::SendWait('{TAB}')
+        Start-Sleep -Milliseconds 250
+        if ($null -ne (Find-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)) -and
+            $null -eq (Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true)) {
+            $leftByTab = $true
+            break
+        }
+    }
+    if (-not $leftByTab) {
+        throw 'Tab focus leaving the vertical tab list did not close the unpinned pane.'
     }
 
     # Pinning must keep the pane open after the pointer exits.
     $showTabs = Find-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)
     Press-Enter $showTabs
-    $pin = Wait-Ui 'Pin vertical tabs' ([Windows.Automation.ControlType]::Button)
+    $pin = Wait-Ui 'Pin the tab pane open' ([Windows.Automation.ControlType]::Button)
     Press-Enter $pin
     [Windows.Forms.Cursor]::Position = [Drawing.Point]::new(
         [Windows.Forms.Screen]::PrimaryScreen.Bounds.Right - 10,
@@ -180,6 +241,13 @@ try {
     Write-Output "UI smoke passed: isolated profile $profileRoot; loopback page $url"
 }
 finally {
+    if ($null -ne $main) {
+        try {
+            Save-WindowScreenshot $main $screenshotPath
+            Write-Output "UI screenshot: $screenshotPath"
+        }
+        catch { Write-Warning "Could not save UI screenshot: $_" }
+    }
     if ($null -ne $app -and -not $app.HasExited) {
         [void] $app.CloseMainWindow()
         if (-not $app.WaitForExit(10000)) { Stop-Process -Id $app.Id -Force -ErrorAction SilentlyContinue }
@@ -187,5 +255,16 @@ finally {
     if ($null -ne $serverProcess -and -not $serverProcess.HasExited) {
         Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
     }
-    if (-not $KeepProfile) { Remove-Item -LiteralPath $profileRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    if (-not $KeepProfile) {
+        $deletePath = [IO.Path]::GetFullPath($profileRoot)
+        if ($deletePath.StartsWith($artifactsPrefix, [StringComparison]::OrdinalIgnoreCase) -and
+            -not ($deletePath.StartsWith($normalRoot, [StringComparison]::OrdinalIgnoreCase) -or
+                  $normalRoot.StartsWith($deletePath, [StringComparison]::OrdinalIgnoreCase))) {
+            $deleteItem = Get-Item -LiteralPath $deletePath -ErrorAction SilentlyContinue
+            if ($null -ne $deleteItem -and -not ($deleteItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                Remove-Item -LiteralPath $deletePath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+        else { Write-Warning "Retained profile because its resolved path failed the cleanup guard: $deletePath" }
+    }
 }
