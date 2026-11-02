@@ -356,7 +356,10 @@
           </ListView.Resources>
           <ListView.ItemTemplate>
             <DataTemplate x:DataType="vm:BrowserTabViewModel">
-              <Grid ColumnSpacing="10" ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
+              <Grid
+                AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
+                ColumnSpacing="10"
+                ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
