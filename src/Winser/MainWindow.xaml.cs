@@ -144,7 +144,7 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(CustomDragRegion);
-        RemoveWindowFrame();
+        HideWindowBorder();
         ApplyCaptionReveal();
 
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
@@ -192,21 +192,15 @@ public sealed partial class MainWindow : Window, IShellWindow
             ? AppWindowPresenterKind.FullScreen
             : AppWindowPresenterKind.Overlapped);
 
-        if (!fullScreen)
-        {
-            RemoveWindowFrame();
-        }
-
         ViewModel.IsFullScreen = fullScreen;
         UpdateChromeLayout();
     }
 
-    private void RemoveWindowFrame()
+    private void HideWindowBorder()
     {
-        if (AppWindow.Presenter is OverlappedPresenter presenter)
-        {
-            presenter.SetBorderAndTitleBar(hasBorder: false, hasTitleBar: false);
-        }
+        const int DwmwaBorderColor = 34;
+        var color = -2;
+        _ = DwmSetWindowAttribute(WindowHandle, DwmwaBorderColor, ref color, sizeof(int));
     }
 
     public void RefreshTabChrome() => UpdateChromeLayout();
@@ -844,6 +838,9 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int valueSize);
 
     /// <summary>
     /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to
