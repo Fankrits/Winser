@@ -50,12 +50,14 @@ switch in settings. See [Memory](#memory).
 **Fit and finish** — Mica backdrop, light/dark/system theme that also drives the page colour
 scheme, high-contrast theme resources, and full keyboard shortcuts.
 
-**Chrome that gets out of the way** — minimize, maximize and close, and the bar they sit on,
-are gone until the pointer reaches the window's top-right corner, then come back together. The
-title bar is collapsed to zero height rather than the buttons being painted out (colour cannot
-hide them: while content is extended into the title bar, the alpha channel is ignored on every
-title-bar colour but the button backgrounds, so a "transparent" glyph is an opaque one). What
-comes back is the system's own title bar, so snap layouts, tooltips and narration are intact.
+**Vertical tabs** — enable *Show tabs on the side* in Appearance. A persistent top action bar
+keeps navigation, the address bar, site information, the browser menu, and tab controls
+available. The tab pane opens when you point at the left edge or choose **Show tabs**; pin it to
+keep it open. Full screen hides the browser chrome, and `Ctrl+L` exits full screen and focuses
+the address bar.
+
+**Address handling** — bare public hostnames open over HTTPS; loopback addresses, including
+`localhost` and `.localhost` hosts, open over HTTP. An explicitly entered scheme is preserved.
 
 ## Keyboard shortcuts
 
@@ -120,9 +122,16 @@ msbuild Winser.sln -p:Configuration=Release -p:Platform=x64
 
 `winser.exe https://example.com` opens that URL on launch.
 
-## UI smoke verification
+## Verification
 
-After building, run the native Windows UI smoke check with PowerShell and Python installed:
+Run the URL resolution checks with the .NET 10 SDK:
+
+```powershell
+dotnet run --project tests/UrlHelperChecks/UrlHelperChecks.csproj
+```
+
+After building the app, run the native Windows UI smoke check with Windows PowerShell and a
+direct Python installation (`python.exe`; the Microsoft Store alias is not supported):
 
 ```powershell
 .\tools\smoke-ui.ps1 -ExePath .\src\Winser\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Winser.exe
