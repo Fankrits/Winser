@@ -204,6 +204,11 @@
       x:Name="VerticalTabsFlyout"
       ShouldConstrainToRootBounds="False"
       IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
+      <Popup.ChildTransitions>
+        <TransitionCollection>
+          <PopupThemeTransition />
+        </TransitionCollection>
+      </Popup.ChildTransitions>
       <Border
         x:Name="VerticalTabsCard"
         Background="{ThemeResource WinserPaneBrush}"
