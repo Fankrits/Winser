@@ -129,6 +129,14 @@ try {
         throw "UI Automation element not found: $name"
     }
 
+    function Wait-UiGone($name, $type = $null, $visibleOnly = $false) {
+        for ($i = 0; $i -lt 40; $i++) {
+            if ($null -eq (Find-Ui $name $type $visibleOnly)) { return }
+            Start-Sleep -Milliseconds 250
+        }
+        throw "UI Automation element remained visible: $name"
+    }
+
     function Press-Enter($element) {
         $element.SetFocus()
         [Windows.Forms.SendKeys]::SendWait('{ENTER}')
@@ -156,13 +164,16 @@ try {
 
     # The tab title confirms WebView2 loaded the loopback page, not just the address input.
     $showTabs = Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button)
-    Press-Enter $showTabs
+    Press-Enter (Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button))
     Wait-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true | Out-Null
     Wait-Ui 'Winser smoke page' ([Windows.Automation.ControlType]::ListItem) $true | Out-Null
-    $hideTabs = Wait-Ui 'Hide tabs' ([Windows.Automation.ControlType]::Button)
-    Press-Enter $hideTabs
+    $siteInfo = Wait-Ui 'Site information' ([Windows.Automation.ControlType]::Button)
+    $siteInfo.SetFocus()
+    [Windows.Forms.Cursor]::Position = [Drawing.Point]::new(
+        [Windows.Forms.Screen]::PrimaryScreen.Bounds.Right - 10,
+        [Windows.Forms.Screen]::PrimaryScreen.Bounds.Bottom - 10)
+    Wait-UiGone 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true
 
-    $siteInfo = Find-Ui 'Site information' ([Windows.Automation.ControlType]::Button)
     Press-Enter $siteInfo
     Wait-Ui '127.0.0.1' $null $true | Out-Null
     Wait-Ui $url $null $true | Out-Null
@@ -177,21 +188,24 @@ try {
     for ($i = 0; $i -lt 12; $i++) { [Windows.Forms.SendKeys]::SendWait('^t'); Start-Sleep -Milliseconds 150 }
 
     # Open the unpinned pane, verify focus keeps it open after pointer exit, then verify focus-out closes it.
-    Press-Enter $showTabs
+    Press-Enter (Wait-Ui 'Show tabs' ([Windows.Automation.ControlType]::Button))
     Wait-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true | Out-Null
     $list = Find-Ui 'Vertical tabs' ([Windows.Automation.ControlType]::List) $true
-    $listItems = $list.FindAll(
-        [Windows.Automation.TreeScope]::Descendants,
-        [Windows.Automation.PropertyCondition]::new(
-            [Windows.Automation.AutomationElement]::ControlTypeProperty,
-            [Windows.Automation.ControlType]::ListItem))
-    if ($listItems.Count -lt 8) { throw "Expected at least 8 visible tabs in the smoke list, found $($listItems.Count)." }
     $list.SetFocus()
+    $scroll = $list.GetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern)
+    [Windows.Forms.SendKeys]::SendWait('{HOME}')
+    Start-Sleep -Milliseconds 250
+    $startScroll = $scroll.Current.VerticalScrollPercent
+    $firstSelection = $list.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection()
     [Windows.Forms.SendKeys]::SendWait('{END}')
     Start-Sleep -Milliseconds 400
     $selected = $list.GetCurrentPattern([Windows.Automation.SelectionPattern]::Pattern).GetSelection()
-    if ($selected.Count -eq 0 -or $selected[0].Current.IsOffscreen) {
+    if ($selected.Count -eq 0 -or $firstSelection.Count -eq 0 -or
+        $selected[0].Current.Name -eq $firstSelection[0].Current.Name -or $selected[0].Current.IsOffscreen) {
         throw 'Keyboard selection did not scroll the selected tab into view.'
+    }
+    if ($scroll.Current.VerticalScrollPercent -le $startScroll) {
+        throw 'Selecting the last tab did not scroll the overflowing tab list.'
     }
     $listBounds = $list.Current.BoundingRectangle
     $selectedBounds = $selected[0].Current.BoundingRectangle
