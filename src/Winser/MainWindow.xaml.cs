@@ -5,6 +5,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.System;
 using Winser.Helpers;
@@ -44,10 +45,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </summary>
     private const int CursorPollMs = 100;
 
-    /// <summary>
-    /// The rate once the cursor has held still for <see cref="CursorRestingAfterMs"/>, and the
-    /// slower one once it has held still for <see cref="CursorIdleAfterMs"/>.
-    /// </summary>
+    /// <summary>The slower rate once the cursor has held still for <see cref="CursorIdleAfterMs"/>.</summary>
     /// <remarks>
     /// <para>
     /// The work per tick really is trivial - one GetCursorPos and two rectangle tests - but that
@@ -65,34 +63,9 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// is caught in flight rather than on arrival.
     /// </para>
     /// </remarks>
-    private const int RestingCursorPollMs = 500;
-
     private const int IdleCursorPollMs = 2000;
 
-    /// <summary>How long the cursor must hold still before each slower rate takes over.</summary>
-    private const int CursorRestingAfterMs = 3_000;
-
     private const int CursorIdleAfterMs = 15_000;
-
-    /// <summary>
-    /// How far around the caption buttons the pointer counts as being at them, in pixels at 100%
-    /// scaling. The zone is the buttons plus this - deliberately forgiving, because nothing is
-    /// drawn there to aim at until the aiming has already worked.
-    /// </summary>
-    private const double CaptionRevealPadding = 16;
-
-    /// <summary>
-    /// How far back out it then has to go. Larger than <see cref="CaptionRevealPadding"/> so that
-    /// a cursor resting on the boundary cannot sample its way in and out and flicker the chrome.
-    /// </summary>
-    private const double CaptionRevealExitPadding = 28;
-
-    /// <summary>
-    /// Extra height the zone keeps below the bar once the buttons are showing, so that hovering
-    /// maximize and reaching down into the Windows 11 snap layout flyout - which drops straight
-    /// down out of that button - does not paint the buttons out from under the pointer.
-    /// </summary>
-    private const double CaptionSnapLayoutReach = 220;
 
     /// <summary>
     /// Stands in for <c>TitleBar.RightInset</c> until the system has reported one - roughly three
@@ -213,9 +186,14 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void FocusAddressBar()
     {
-        if (ViewModel.IsFullScreen)
+        var wasFullScreen = ViewModel.IsFullScreen;
+        if (wasFullScreen)
         {
             SetFullScreen(false);
+        }
+
+        if (wasFullScreen || ViewModel.UseVerticalTabs)
+        {
             DispatcherQueue.TryEnqueue(FocusVisibleAddressBar);
         }
         else
@@ -602,13 +580,17 @@ public sealed partial class MainWindow : Window, IShellWindow
             return;
         }
 
-        if (_isMinimized)
+        if (_isMinimized || !ViewModel.IsVerticalTabsPaneVisible)
         {
             _cursorWatchTimer?.Stop();
+            _pointerOverVerticalTabsCard = false;
+            ViewModel.IsVerticalTabsListFocused = false;
             ViewModel.IsVerticalTabsPointerOver = false;
-            SetCaptionRevealed(false);
+            SetCaptionRevealed(!_isMinimized && !ViewModel.IsFullScreen);
             return;
         }
+
+        SetCaptionRevealed(true);
 
         _cursorWatchTimer ??= CreateCursorWatchTimer();
 
@@ -629,10 +611,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(_cursorPollMs) };
         timer.Tick += (_, _) =>
         {
-            // Both zones are evaluated on every tick whatever the rate, so backing off changes
-            // only how soon a change is noticed - never whether it is.
             UpdateVerticalTabsHover();
-            UpdateCaptionReveal();
             AdjustCursorPollRate();
         };
         return timer;
@@ -657,19 +636,16 @@ public sealed partial class MainWindow : Window, IShellWindow
             _cursorMovedAtTicks = Environment.TickCount64;
         }
 
-        // A zone that is currently open is being pointed at right now, and leaving it has to
-        // feel as prompt as reaching it did.
-        if (_isCaptionRevealed || ViewModel.IsVerticalTabsPointerOver)
+        // Leaving the pane should feel as prompt as reaching it did.
+        if (GetForegroundWindow() == WindowHandle &&
+            (_pointerOverVerticalTabsCard || IsCursorAtLeftEdge()))
         {
             SetCursorPollRate(CursorPollMs);
             return;
         }
 
         var still = Environment.TickCount64 - _cursorMovedAtTicks;
-        SetCursorPollRate(
-            still >= CursorIdleAfterMs ? IdleCursorPollMs
-            : still >= CursorRestingAfterMs ? RestingCursorPollMs
-            : CursorPollMs);
+        SetCursorPollRate(still >= CursorIdleAfterMs ? IdleCursorPollMs : CursorPollMs);
     }
 
     /// <summary>
@@ -707,28 +683,6 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         ViewModel.IsVerticalTabsPointerOver = _pointerOverVerticalTabsCard || IsCursorAtLeftEdge();
     }
-
-    /// <summary>
-    /// Brings the caption buttons back, along with the bar they sit on in vertical tabs mode,
-    /// while the cursor is in the window's top-right corner - and takes both away again as soon
-    /// as it leaves.
-    /// </summary>
-    /// <remarks>
-    /// Unlike the pane above this deliberately does not check for the foreground window. Reaching
-    /// for the close button of a window you have not focused yet is an ordinary way to close it,
-    /// and buttons that stayed gone until after a click would be worse than no auto-hide at all.
-    /// A window that is genuinely behind another one has its corner covered by that window, so
-    /// restoring its own buttons under there costs nothing and shows nothing.
-    /// </remarks>
-    private void UpdateCaptionReveal() => SetCaptionRevealed(!ViewModel.IsFullScreen);
-
-    private bool IsTopActionBarFocused() =>
-        TopAddressBox.FocusState != FocusState.Unfocused ||
-        TopBackButton.FocusState != FocusState.Unfocused ||
-        TopForwardButton.FocusState != FocusState.Unfocused ||
-        TopReloadButton.FocusState != FocusState.Unfocused ||
-        TopNewTabButton.FocusState != FocusState.Unfocused ||
-        TopPinButton.FocusState != FocusState.Unfocused;
 
     private void SetCaptionRevealed(bool revealed)
     {
@@ -779,7 +733,16 @@ public sealed partial class MainWindow : Window, IShellWindow
         TopForwardButton.IsTabStop = _isCaptionRevealed;
         TopReloadButton.IsTabStop = _isCaptionRevealed;
         TopNewTabButton.IsTabStop = _isCaptionRevealed;
+        TopShowTabsButton.IsTabStop = _isCaptionRevealed;
         TopPinButton.IsTabStop = _isCaptionRevealed;
+        if (TopSiteInfoButton.FindDescendant<Button>() is { } siteInfoButton)
+        {
+            siteInfoButton.IsTabStop = _isCaptionRevealed;
+        }
+        if (TopMenuButton.FindDescendant<Button>() is { } menuButton)
+        {
+            menuButton.IsTabStop = _isCaptionRevealed;
+        }
         UpdateTopBarInsets();
         UpdateTopBarPassthroughRegions();
     }
@@ -812,7 +775,13 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         var scale = xamlRoot.RasterizationScale;
-        var regions = new FrameworkElement[] { TopAddressBox, TopBackButton, TopForwardButton, TopReloadButton, TopNewTabButton, TopPinButton }
+        var regions = new FrameworkElement?[]
+            {
+                TopAddressBox, TopBackButton, TopForwardButton, TopReloadButton, TopNewTabButton,
+                TopShowTabsButton, TopPinButton,
+                TopSiteInfoButton.FindDescendant<Button>(), TopMenuButton.FindDescendant<Button>()
+            }
+            .OfType<FrameworkElement>()
             .Where(element => element.Visibility == Visibility.Visible)
             .Select(element =>
             {
@@ -827,49 +796,6 @@ public sealed partial class MainWindow : Window, IShellWindow
             .ToArray();
         InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
             .SetRegionRects(NonClientRegionKind.Passthrough, regions);
-    }
-
-    private bool IsCursorInCaptionZone()
-    {
-        // Full screen has no caption buttons and no bar under them, so there is nothing the zone
-        // could reveal - and TitleBar reports no inset to anchor it to either.
-        if (ViewModel.IsFullScreen)
-        {
-            return false;
-        }
-
-        if (!GetCursorPos(out var cursor))
-        {
-            return false;
-        }
-
-        var origin = default(POINT);
-        if (!ClientToScreen(WindowHandle, ref origin))
-        {
-            return false;
-        }
-
-        var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
-        if (scale <= 0)
-        {
-            scale = 1.0;
-        }
-
-        // Anchored to the client area rather than to AppWindow.Position, which is the outer rect:
-        // a maximized window's outer rect hangs off every screen edge by the width of its
-        // invisible resize border, and a corner measured from it would sit that far out.
-        var padding = (int)Math.Round((_isCaptionRevealed ? CaptionRevealExitPadding : CaptionRevealPadding) * scale);
-        var reach = _isCaptionRevealed ? (int)Math.Round(CaptionSnapLayoutReach * scale) : 0;
-
-        var clientWidth = (int)Math.Round(RootGrid.ActualWidth * scale);
-        var inset = (int)Math.Round(_captionInset * scale);
-        var barHeight = (int)Math.Round(TabStripHeight * scale);
-
-        var left = origin.X + clientWidth - inset - padding;
-        var top = origin.Y - padding;
-
-        return cursor.X >= left && cursor.X <= origin.X + clientWidth + padding &&
-               cursor.Y >= top && cursor.Y <= origin.Y + barHeight + reach + padding;
     }
 
     private bool IsCursorAtLeftEdge()
@@ -911,6 +837,21 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
         _pointerOverVerticalTabsCard = false;
 
+    private void OnVerticalTabsFlyoutOpened(object sender, object e)
+    {
+        ScrollSelectedVerticalTabIntoView();
+        if (ViewModel.IsVerticalTabsManuallyRevealed)
+        {
+            VerticalTabList.Focus(FocusState.Programmatic);
+        }
+    }
+
+    private void OnVerticalTabContextFlyoutOpened(object sender, object e) =>
+        ViewModel.IsVerticalTabsManuallyRevealed = true;
+
+    private void OnVerticalTabContextFlyoutClosed(object sender, object e) =>
+        ViewModel.IsVerticalTabsManuallyRevealed = false;
+
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
     {
@@ -944,6 +885,39 @@ public sealed partial class MainWindow : Window, IShellWindow
         if ((sender as ListView)?.SelectedItem is BrowserTabViewModel tab)
         {
             ViewModel.SelectedTab = tab;
+            VerticalTabList.ScrollIntoView(tab);
+        }
+    }
+
+    private void OnVerticalTabListGotFocus(object sender, RoutedEventArgs e)
+    {
+        ViewModel.IsVerticalTabsListFocused = true;
+        ViewModel.IsVerticalTabsManuallyRevealed = false;
+    }
+
+    private void OnVerticalTabListLostFocus(object sender, RoutedEventArgs e) =>
+        DispatcherQueue.TryEnqueue(() => ViewModel.IsVerticalTabsListFocused = IsFocusWithin(VerticalTabList));
+
+    private bool IsFocusWithin(DependencyObject element)
+    {
+        for (var focused = FocusManager.GetFocusedElement(RootGrid.XamlRoot) as DependencyObject;
+             focused is not null;
+             focused = VisualTreeHelper.GetParent(focused))
+        {
+            if (ReferenceEquals(focused, element))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ScrollSelectedVerticalTabIntoView()
+    {
+        if (ViewModel.SelectedTab is { } tab)
+        {
+            VerticalTabList.ScrollIntoView(tab);
         }
     }
 

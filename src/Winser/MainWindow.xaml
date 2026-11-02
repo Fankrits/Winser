@@ -4,6 +4,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:controls="using:Winser.Controls"
   xmlns:views="using:Winser.Views"
   xmlns:vm="using:Winser.ViewModels"
   mc:Ignorable="d">
@@ -121,6 +122,7 @@
           <TabViewItem
             Header="{x:Bind Title, Mode=OneWay}"
             IconSource="{x:Bind TabIcon, Mode=OneWay}"
+            IsTabStop="{x:Bind ViewModel.IsToolbarVisible, Mode=OneWay}"
             ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
 
             <TabViewItem.ContextFlyout>
@@ -182,6 +184,9 @@
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition x:Name="TopRightCaptionPadding" Width="0" />
           </Grid.ColumnDefinitions>
           <Button x:Name="TopBackButton" Grid.Column="1" AutomationProperties.Name="Back"
@@ -201,12 +206,22 @@
                           TextMemberPath="Text" GotFocus="OnVerticalAddressGotFocus"
                           LostFocus="OnVerticalAddressLostFocus" QuerySubmitted="OnVerticalAddressQuerySubmitted"
                           TextChanged="OnVerticalAddressTextChanged" />
-          <Button x:Name="TopNewTabButton" Grid.Column="5" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
+          <controls:BrowserSiteInfoButton x:Name="TopSiteInfoButton" Grid.Column="5"
+                                          Tab="{x:Bind ViewModel.SelectedTab, Mode=OneWay}" />
+          <Button x:Name="TopNewTabButton" Grid.Column="6" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
                   Content="&#xE710;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="New tab" />
-          <Button x:Name="TopPinButton" Grid.Column="6" AutomationProperties.Name="Pin vertical tabs"
+          <Button x:Name="TopShowTabsButton" Grid.Column="7"
+                  AutomationProperties.Name="Show tabs"
+                  Command="{x:Bind ViewModel.ShowVerticalTabsCommand}"
+                  Content="&#xE7C4;" Style="{StaticResource ToolbarIconButtonStyle}"
+                  ToolTipService.ToolTip="Show the tab pane" />
+          <Button x:Name="TopPinButton" Grid.Column="8"
+                  AutomationProperties.Name="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
                   Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
                   Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}" Style="{StaticResource ToolbarIconButtonStyle}"
                   ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}" />
+          <controls:BrowserMenuButton x:Name="TopMenuButton" Grid.Column="9"
+                                      Tab="{x:Bind ViewModel.SelectedTab, Mode=OneWay}" />
         </Grid>
       </Border>
     </Grid>
@@ -229,15 +244,14 @@
       three failed attempts to suppress it at the window level. Rounded corners and theme are
       ordinary XAML here rather than DWM attributes and manual propagation.
 
-      Known trade, and the reason this route was passed over the first time: drag-and-drop inside
-      a windowed popup is broken by microsoft-ui-xaml#9276, so reordering tabs by dragging them
-      within the pane may not work. That issue predates the WinAppSDK 2.3 this project builds
-      against; if it still reproduces, reordering is the thing to give up, not the floating.
+      ListView's native reordering stays enabled; the popup drag-and-drop bug was fixed in Windows
+      App SDK 1.6.
     -->
     <Popup
       x:Name="VerticalTabsFlyout"
       ShouldConstrainToRootBounds="False"
-      IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
+      IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}"
+      Opened="OnVerticalTabsFlyoutOpened">
       <Popup.ChildTransitions>
         <TransitionCollection>
           <PopupThemeTransition />
@@ -291,6 +305,7 @@
 
         <ListView
           x:Name="VerticalTabList"
+          AutomationProperties.Name="Vertical tabs"
           Grid.Row="1"
           Padding="6,0,6,6"
           AllowDrop="True"
@@ -299,6 +314,8 @@
           ItemsSource="{x:Bind ViewModel.Tabs, Mode=OneWay}"
           SelectedItem="{x:Bind ViewModel.SelectedTab, Mode=OneWay}"
           SelectionChanged="OnVerticalTabSelectionChanged"
+          GotFocus="OnVerticalTabListGotFocus"
+          LostFocus="OnVerticalTabListLostFocus"
           SelectionMode="Single">
           <!--
             A soft translucent pill for the selected row instead of ListViewItem's default
@@ -344,7 +361,7 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid.ContextFlyout>
-                  <MenuFlyout>
+                  <MenuFlyout Opened="OnVerticalTabContextFlyoutOpened" Closed="OnVerticalTabContextFlyoutClosed">
                     <MenuFlyoutItem Command="{x:Bind DuplicateCommand}" Text="Duplicate tab" />
                     <MenuFlyoutItem Command="{x:Bind ReloadOrStopCommand}" Text="Reload" />
                     <MenuFlyoutSeparator />

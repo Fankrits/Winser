@@ -82,6 +82,14 @@ public sealed partial class BrowserViewModel : ObservableObject
     public partial bool IsVerticalTabsPointerOver { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility), nameof(IsVerticalTabsPaneExpanded))]
+    public partial bool IsVerticalTabsManuallyRevealed { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility), nameof(IsVerticalTabsPaneExpanded))]
+    public partial bool IsVerticalTabsListFocused { get; set; }
+
+    [ObservableProperty]
     public partial bool HasActiveDownloads { get; set; }
 
     public BrowserViewModel(bool isPrivate)
@@ -136,8 +144,8 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// </summary>
     public bool IsToolbarVisible => !IsFullScreen && !UseVerticalTabs;
 
-    /// <summary>Pinned open or actively being peeked at via hover.</summary>
-    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver;
+    /// <summary>Pinned, manually shown, hovered, or still holding keyboard focus.</summary>
+    public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver || IsVerticalTabsManuallyRevealed || IsVerticalTabsListFocused;
 
     /// <summary>
     /// Whether the pane's actual chrome - background, header, nav row, address bar, tab list -
@@ -162,7 +170,7 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     public string PinGlyph => IsVerticalTabsPinned ? Glyphs.Unpin : Glyphs.Pin;
 
-    public string PinTooltip => IsVerticalTabsPinned ? "Unpin the tab pane" : "Keep the tab pane open";
+    public string PinTooltip => IsVerticalTabsPinned ? "Unpin the tab pane" : "Pin the tab pane open";
 
     public void AttachWindow(IShellWindow window) => _window = window;
 
@@ -179,7 +187,10 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedTabChanged(BrowserTabViewModel? value) => RescheduleIdleSweep();
+    partial void OnSelectedTabChanged(BrowserTabViewModel? value)
+    {
+        RescheduleIdleSweep();
+    }
 
     /// <summary>A download starting or finishing gates the whole sweep; see NextDiscardDueUtc.</summary>
     partial void OnHasActiveDownloadsChanged(bool value) => RescheduleIdleSweep();
@@ -192,7 +203,7 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
     }
 
-    // All four drive the window's pixel-level layout (the hover strip's width, the drag region,
+    // These drive the window's pixel-level layout (the drag region,
     // whether the native strip is hidden, and the floating pane's own size and offset), which
     // lives on the window rather than here. Routing every write through RefreshTabChrome - rather
     // than only the ones a window event handler starts - covers UseVerticalTabs flipping from
@@ -202,6 +213,8 @@ public sealed partial class BrowserViewModel : ObservableObject
     partial void OnIsVerticalTabsPinnedChanged(bool value) => _window?.RefreshTabChrome();
 
     partial void OnIsVerticalTabsPointerOverChanged(bool value) => _window?.RefreshTabChrome();
+
+    partial void OnIsVerticalTabsManuallyRevealedChanged(bool value) => _window?.RefreshTabChrome();
 
     /// <summary>The owning window's HWND, for WinRT pickers that need an owner.</summary>
     public nint WindowHandle => _window?.WindowHandle ?? IntPtr.Zero;
@@ -234,6 +247,10 @@ public sealed partial class BrowserViewModel : ObservableObject
         if (select)
         {
             SelectedTab = tab;
+            if (UseVerticalTabs && tab.IsNewTabPage)
+            {
+                _window?.FocusAddressBar();
+            }
         }
 
         RescheduleIdleSweep();
@@ -772,8 +789,18 @@ public sealed partial class BrowserViewModel : ObservableObject
     private void ToggleVerticalTabsPinned()
     {
         IsVerticalTabsPinned = !IsVerticalTabsPinned;
+        IsVerticalTabsManuallyRevealed = false;
         AppServices.Settings.Current.VerticalTabsPinned = IsVerticalTabsPinned;
         AppServices.Settings.Commit();
+    }
+
+    [RelayCommand]
+    private void ShowVerticalTabs()
+    {
+        if (!IsVerticalTabsExpanded)
+        {
+            IsVerticalTabsManuallyRevealed = true;
+        }
     }
 
     [RelayCommand]
