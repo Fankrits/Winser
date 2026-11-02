@@ -159,6 +159,8 @@ public sealed partial class MainWindow : Window, IShellWindow
         RootGrid.SizeChanged += (_, _) =>
         {
             UpdateCaptionInset();
+            UpdateTopBarInsets();
+            UpdateTopBarPassthroughRegions();
 
             // The popup is not laid out in this Grid, so nothing resizes it on the window's
             // behalf the way layout would for an inline child - it has to be told, every resize.
@@ -758,13 +760,34 @@ public sealed partial class MainWindow : Window, IShellWindow
         TopReloadButton.IsTabStop = _isCaptionRevealed;
         TopNewTabButton.IsTabStop = _isCaptionRevealed;
         TopPinButton.IsTabStop = _isCaptionRevealed;
+        UpdateTopBarInsets();
         UpdateTopBarPassthroughRegions();
+    }
+
+    private void OnTopActionBarLayoutChanged(object sender, RoutedEventArgs e) => UpdateTopBarPassthroughRegions();
+
+    private void OnTopActionBarSizeChanged(object sender, SizeChangedEventArgs e) => UpdateTopBarPassthroughRegions();
+
+    private void UpdateTopBarInsets()
+    {
+        var scale = RootGrid.XamlRoot?.RasterizationScale ?? 1.0;
+        if (scale <= 0) scale = 1.0;
+        TopLeftCaptionPadding.Width = new GridLength(AppWindow.TitleBar.LeftInset > 0
+            ? AppWindow.TitleBar.LeftInset / scale : 0);
+        TopRightCaptionPadding.Width = new GridLength(_isCaptionRevealed ? _captionInset : FallbackCaptionInset);
     }
 
     private void UpdateTopBarPassthroughRegions()
     {
-        if (ViewModel.IsFullScreen || RootGrid.XamlRoot is not { } xamlRoot)
+        if (RootGrid.XamlRoot is not { } xamlRoot)
         {
+            return;
+        }
+
+        if (ViewModel.IsFullScreen || !_isCaptionRevealed)
+        {
+            InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+                .SetRegionRects(NonClientRegionKind.Passthrough, Array.Empty<RectInt32>());
             return;
         }
 

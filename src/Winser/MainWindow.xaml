@@ -174,35 +174,38 @@
         <Border.OpacityTransition>
           <ScalarTransition Duration="0:0:0.12" />
         </Border.OpacityTransition>
-        <Grid Height="40" Padding="8,4" ColumnSpacing="4">
+        <Grid x:Name="TopActionBarGrid" Height="40" Padding="8,4" ColumnSpacing="4"
+              Loaded="OnTopActionBarLayoutChanged" SizeChanged="OnTopActionBarSizeChanged">
           <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="TopLeftCaptionPadding" Width="0" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition x:Name="TopRightCaptionPadding" Width="0" />
           </Grid.ColumnDefinitions>
-          <Button x:Name="TopBackButton" Grid.Column="0" AutomationProperties.Name="Back"
+          <Button x:Name="TopBackButton" Grid.Column="1" AutomationProperties.Name="Back"
                   Command="{x:Bind ViewModel.SelectedTab.GoBackCommand, Mode=OneWay}"
                   Content="&#xE72B;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="Back" />
-          <Button x:Name="TopForwardButton" Grid.Column="1" AutomationProperties.Name="Forward"
+          <Button x:Name="TopForwardButton" Grid.Column="2" AutomationProperties.Name="Forward"
                   Command="{x:Bind ViewModel.SelectedTab.GoForwardCommand, Mode=OneWay}"
                   Content="&#xE72A;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="Forward" />
-          <Button x:Name="TopReloadButton" Grid.Column="2" AutomationProperties.Name="Reload"
+          <Button x:Name="TopReloadButton" Grid.Column="3" AutomationProperties.Name="Reload"
                   Command="{x:Bind ViewModel.SelectedTab.ReloadOrStopCommand, Mode=OneWay}"
                   Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
                   Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
-          <AutoSuggestBox x:Name="TopAddressBox" Grid.Column="3" Height="32" CornerRadius="16"
+          <AutoSuggestBox x:Name="TopAddressBox" Grid.Column="4" Height="32" CornerRadius="16"
                           ItemsSource="{x:Bind ViewModel.SelectedTab.Suggestions, Mode=OneWay}"
                           PlaceholderText="Search or enter web address"
                           Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
                           TextMemberPath="Text" GotFocus="OnVerticalAddressGotFocus"
                           LostFocus="OnVerticalAddressLostFocus" QuerySubmitted="OnVerticalAddressQuerySubmitted"
                           TextChanged="OnVerticalAddressTextChanged" />
-          <Button x:Name="TopNewTabButton" Grid.Column="4" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
+          <Button x:Name="TopNewTabButton" Grid.Column="5" AutomationProperties.Name="New tab" Command="{x:Bind ViewModel.AddTabCommand}"
                   Content="&#xE710;" Style="{StaticResource ToolbarIconButtonStyle}" ToolTipService.ToolTip="New tab" />
-          <Button x:Name="TopPinButton" Grid.Column="5" AutomationProperties.Name="Pin vertical tabs"
+          <Button x:Name="TopPinButton" Grid.Column="6" AutomationProperties.Name="Pin vertical tabs"
                   Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
                   Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}" Style="{StaticResource ToolbarIconButtonStyle}"
                   ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}" />
