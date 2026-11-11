@@ -65,6 +65,10 @@ title bar is collapsed to zero height rather than the buttons being painted out 
 hide them: while content is extended into the title bar, the alpha channel is ignored on every
 title-bar colour but the button backgrounds, so a "transparent" glyph is an opaque one). What
 comes back is the system's own title bar, so snap layouts, tooltips and narration are intact.
+With tabs on the side the bar is fully gone at rest - nothing over the page, not even an
+invisible drag strip - and when it comes back it takes a row of its own, pushing the page down
+rather than covering the top of the site. Once out, it stays while the pointer is anywhere along
+it, so the whole bar can be used to drag the window.
 
 ## Keyboard shortcuts
 

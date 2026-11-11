@@ -136,6 +136,13 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </summary>
     private const double FallbackCaptionInset = 138;
 
+    /// <summary>
+    /// Height of the bar the caption buttons come back on in vertical tabs mode - the height of
+    /// the buttons themselves at <see cref="TitleBarHeightOption.Standard"/>, so the bar is no
+    /// taller than what it carries.
+    /// </summary>
+    private const double VerticalCaptionBarHeight = 32;
+
     private bool _isClosing;
     private bool _isWindowActive = true;
     private bool _isMinimized;
@@ -493,11 +500,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         UpdateVerticalTabsPane();
         UpdatePageInset();
 
-        // The vertical mode drag region overlays the same top strip TabStrip just vacated,
-        // rather than reserving it, so it needs to match that same height to look intentional.
-        // It spans the full width and needs no offset for the pane: the pane floats above it in
-        // its own popup and takes that input itself rather than competing for it.
-        VerticalModeDragRegion.Height = TabStripHeight;
+        // The vertical mode bar only exists while the caption buttons are out; see
+        // UpdateVerticalCaptionBar.
+        UpdateVerticalCaptionBar();
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
@@ -523,8 +528,35 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void UpdatePageInset()
     {
         var top = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs ? -TabStripHeight : 0;
+
+        // The caption bar in vertical tabs mode takes its own row while it is out, pushing the
+        // page down, rather than being drawn over the top of the site.
+        if (IsVerticalChrome && _isCaptionRevealed)
+        {
+            top += VerticalCaptionBarHeight;
+        }
+
         var left = IsVerticalTabsDocked ? VerticalTabsPaneWidth + (VerticalTabsPaneMargin * 2) : 0;
         TabStrip.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    private bool IsVerticalChrome => ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
+
+    /// <summary>
+    /// In vertical tabs mode the page runs to the top of the window, so the bar the caption
+    /// buttons sit on is either fully there or fully gone - never a transparent strip lying over
+    /// the site. Hidden, it is zero height: no tint, no buttons, and no drag region either, so
+    /// the top of the page takes clicks like the rest of it. Shown, it is a real row the page is
+    /// pushed down below (see <see cref="UpdatePageInset"/>), and the whole of it drags the
+    /// window. Horizontal mode needs none of this: there the buttons sit in the tab strip, which
+    /// is never over the page.
+    /// </summary>
+    private void UpdateVerticalCaptionBar()
+    {
+        // Resizing the element SetTitleBar was given is enough: WinUI re-derives the drag
+        // rectangle from its bounds, so at zero height there is no drag region at all.
+        VerticalModeDragRegion.Height = _isCaptionRevealed ? VerticalCaptionBarHeight : 0;
+        UpdatePageInset();
     }
 
     private bool IsVerticalTabsDocked =>
@@ -1013,6 +1045,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         TopChromeTint.Opacity = _isCaptionRevealed ? 1 : 0;
+        UpdateVerticalCaptionBar();
     }
 
     private bool IsCursorInCaptionZone()
@@ -1049,10 +1082,21 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         var clientWidth = (int)Math.Round(RootGrid.ActualWidth * scale);
         var inset = (int)Math.Round(_captionInset * scale);
-        var barHeight = (int)Math.Round(TabStripHeight * scale);
+        var vertical = IsVerticalChrome;
+        var barHeight = (int)Math.Round((vertical ? VerticalCaptionBarHeight : TabStripHeight) * scale);
 
         var left = origin.X + clientWidth - inset - padding;
         var top = origin.Y - padding;
+
+        // In vertical tabs mode the revealed bar is the window's only title bar - the one place
+        // to drag the window from - so once it is out it stays out while the pointer is anywhere
+        // along it, not just near the buttons that summoned it.
+        if (vertical && _isCaptionRevealed &&
+            cursor.X >= origin.X - padding && cursor.X <= origin.X + clientWidth + padding &&
+            cursor.Y >= top && cursor.Y <= origin.Y + barHeight + padding)
+        {
+            return true;
+        }
 
         return cursor.X >= left && cursor.X <= origin.X + clientWidth + padding &&
                cursor.Y >= top && cursor.Y <= origin.Y + barHeight + reach + padding;

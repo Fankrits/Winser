@@ -138,18 +138,18 @@
     </TabView>
 
     <!--
-      Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
-      clearance, since TabStrip's own footer is inside its (now hidden) native strip.
+      Vertical tabs mode's stand-in for TabStripFooter: the bar the caption buttons come back on,
+      and the window's drag region, since TabStrip's own footer is inside its (now hidden) strip.
 
-      An overlay (Top-aligned, Height set from code to match TabStripHeight), not a reserved
-      Grid row: TabStrip has to keep its cell anchored at y=0 for the strip-hiding trick below
-      to work at all, so there is no row left over here to occupy - "content starts at y=40"
-      and "the native strip is fully off-screen above y=0" are not simultaneously satisfiable
-      once TabStrip's own cell has been pushed down to y=40 by a reserved row, because the
-      strip and the content it hides above are one contiguous block inside TabView's template.
-      Overlaying instead of reserving space means this bar tints whatever content is directly
-      under it rather than displacing it - the same trade Windows 11 itself makes when content
-      scrolls under an extended, Mica-tinted title bar.
+      Fully there or fully gone, never a transparent layer over the site. At rest its Height is 0
+      - no tint, no buttons, no drag region - so the page runs to the top of the window and its
+      top edge takes clicks like the rest of it. When the pointer reaches the top-right corner,
+      MainWindow.UpdateVerticalCaptionBar gives it its height back and pushes the page down by
+      the same amount, so the bar has a row of its own rather than covering the top of the page.
+
+      Still Top-aligned in RootGrid's one cell rather than a Grid row of its own: TabStrip has
+      to stay anchored at y=0 for the strip-hiding trick (see UpdatePageInset), so the room for
+      the bar is made by the page's top margin instead.
     -->
     <Grid
       x:Name="VerticalModeDragRegion"
@@ -158,17 +158,14 @@
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}">
 
       <!--
-        The tint is a child rather than this Grid's own Background so that hiding it costs the
-        window nothing: the Grid stays laid out and stays the element handed to SetTitleBar, so
-        dragging the window by its top edge works whether the bar is showing or not. Transparent
+        The tint is a child rather than this Grid's own Background so the Grid itself can stay
+        the element handed to SetTitleBar in both states - only its height changes. Transparent
         rather than unset on the Grid for the usual reason - an unset Background is not
-        hit-testable, and this one has to be.
+        hit-testable, and this one has to be while the bar is out.
 
         Opacity is driven from MainWindow.ApplyCaptionReveal, along with the caption buttons
         this bar exists to make room for: page-first at rest, chrome when the pointer goes
-        looking for it. The transition is short and only on this half of the pair - the buttons
-        come back by the title bar being given its height again, which is not something there is
-        any way to animate; a slower fade here would leave them hanging over an empty bar.
+        looking for it.
       -->
       <Border x:Name="TopChromeTint" Background="{ThemeResource WinserChromeBrush}" Opacity="0">
         <Border.OpacityTransition>
