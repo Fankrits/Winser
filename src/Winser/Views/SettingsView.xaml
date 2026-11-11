@@ -119,6 +119,51 @@
             </Grid>
           </Border>
 
+          <!--  Only meaningful with tabs on the side, so only shown then.  -->
+          <Border
+            Margin="0,8,0,0"
+            Style="{StaticResource SettingsCardStyle}"
+            Visibility="{x:Bind ViewModel.UseVerticalTabs, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <Grid ColumnSpacing="16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Auto-hide the sidebar" TextWrapping="Wrap" />
+                <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="Gives the page the whole window. Move the pointer to the left edge to slide the tabs back in. Ctrl+Shift+S switches between this and a docked sidebar." TextWrapping="Wrap" />
+              </StackPanel>
+              <ToggleSwitch
+                Grid.Column="1"
+                IsOn="{x:Bind ViewModel.AutoHideVerticalTabs, Mode=TwoWay}"
+                OffContent=""
+                OnContent=""
+                VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
+          <Border
+            Margin="0,8,0,0"
+            Style="{StaticResource SettingsCardStyle}"
+            Visibility="{x:Bind ViewModel.UseVerticalTabs, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+            <Grid ColumnSpacing="16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock Text="Sidebar animation" TextWrapping="Wrap" />
+                <TextBlock Opacity="0.6" Style="{StaticResource CaptionTextBlockStyle}" Text="How quickly the sidebar slides in and out. Also off whenever Windows' animation effects are." TextWrapping="Wrap" />
+              </StackPanel>
+              <ComboBox
+                Grid.Column="1"
+                MinWidth="200"
+                ItemsSource="{x:Bind ViewModel.SidebarAnimationOptions}"
+                SelectedIndex="{x:Bind ViewModel.SidebarAnimationIndex, Mode=TwoWay}"
+                VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
           <Border Margin="0,8,0,0" Style="{StaticResource SettingsCardStyle}">
             <Grid ColumnSpacing="16">
               <Grid.ColumnDefinitions>

@@ -1,13 +1,20 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 using Windows.Graphics;
 using Windows.System;
+using Windows.UI.ViewManagement;
 using Winser.Helpers;
+using Winser.Models;
 using Winser.Services;
 using Winser.ViewModels;
 
@@ -37,6 +44,34 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// corners only look intentional with a gap for them to show against.
     /// </summary>
     private const double VerticalTabsPaneMargin = 8;
+
+    /// <summary>
+    /// Narrowest window in which a pinned pane docks beside the page, the way Arc and Zen dock
+    /// theirs. Below it a docked pane would leave the page a sliver, so the pinned pane floats
+    /// over the page instead - still open, just not taking the room.
+    /// </summary>
+    private const double MinWidthToDockVerticalTabs = 640;
+
+    /// <summary>
+    /// How long the pointer may be away from both the left edge and the auto-hidden pane before
+    /// the pane slides back out. Long enough to forgive overshooting the pane's edge on the way
+    /// to a tab, or skimming past it on the way back - short enough that leaving still feels
+    /// like the pane following the hand rather than lingering.
+    /// </summary>
+    private const int VerticalTabsHideDelayMs = 250;
+
+    /// <summary>
+    /// The slowest the cursor poll may back off to while an auto-hidden pane is waiting to be
+    /// summoned in the foreground window. See <see cref="AdjustCursorPollRate"/>.
+    /// </summary>
+    private const int ArmedCursorPollMs = 150;
+
+    /// <summary>Slide durations for <see cref="SidebarAnimationSpeed"/>; exits run at 3/4 of these.</summary>
+    private const int FastPaneAnimationMs = 150;
+
+    private const int NormalPaneAnimationMs = 240;
+
+    private const int RelaxedPaneAnimationMs = 360;
 
     /// <summary>
     /// How often the cursor is checked against the zones below while it is actually moving.
@@ -101,6 +136,13 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </summary>
     private const double FallbackCaptionInset = 138;
 
+    /// <summary>
+    /// Height of the bar the caption buttons come back on in vertical tabs mode - the height of
+    /// the buttons themselves at <see cref="TitleBarHeightOption.Standard"/>, so the bar is no
+    /// taller than what it carries.
+    /// </summary>
+    private const double VerticalCaptionBarHeight = 32;
+
     private bool _isClosing;
     private bool _isWindowActive = true;
     private bool _isMinimized;
@@ -116,7 +158,29 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// <summary>The interval currently on <see cref="_cursorWatchTimer"/>, to avoid restarting it.</summary>
     private int _cursorPollMs = CursorPollMs;
 
-    private bool _pointerOverVerticalTabsCard;
+    /// <summary>
+    /// When the pointer was last seen leaving both the edge zone and the pane, or 0 while it is
+    /// still on one of them. Drives <see cref="VerticalTabsHideDelayMs"/>.
+    /// </summary>
+    private long _paneHoverLostAtTicks;
+
+    /// <summary>
+    /// The state the pane was last told to animate towards - which is not the same as
+    /// Popup.IsOpen: the popup stays open for the length of the exit animation.
+    /// </summary>
+    private bool _isVerticalTabsPaneShown;
+
+    /// <summary>Bumped per pane animation, so a superseded exit cannot close the popup late.</summary>
+    private int _paneAnimationGeneration;
+
+    /// <summary>
+    /// False until the window has been activated once: the pane starting pinned should simply be
+    /// there when the window appears, not slide in as it opens.
+    /// </summary>
+    private bool _hasActivated;
+
+    /// <summary>For the system's "Animation effects" switch, which the pane's slide respects.</summary>
+    private readonly UISettings _uiSettings = new();
 
     /// <summary>Whether the caption buttons and the bar they sit on are currently showing.</summary>
     private bool _isCaptionRevealed;
@@ -149,6 +213,11 @@ public sealed partial class MainWindow : Window, IShellWindow
         PrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
         VerticalPrivateBadge.Visibility = isPrivate ? Visibility.Visible : Visibility.Collapsed;
 
+        // The pane slides on its composition Translation rather than a RenderTransform, so the
+        // motion runs on the compositor thread and stays smooth even while the UI thread is busy
+        // with a page loading or a tab switching.
+        ElementCompositionPreview.SetIsTranslationEnabled(VerticalTabsCard, true);
+
         ApplyTheme();
         UpdateChromeLayout();
         AppServices.Settings.Changed += OnSettingsChanged;
@@ -161,8 +230,14 @@ public sealed partial class MainWindow : Window, IShellWindow
 
             // The popup is not laid out in this Grid, so nothing resizes it on the window's
             // behalf the way layout would for an inline child - it has to be told, every resize.
+            // The page's inset follows the pane's width, and whether there is room to dock.
             UpdateVerticalTabsFlyout();
+            UpdatePageInset();
         };
+
+        // A windowed popup cannot open before there is a XamlRoot for it to belong to, so a pane
+        // that starts out pinned is only actually opened once the content has loaded.
+        RootGrid.Loaded += (_, _) => UpdateChromeLayout();
 
         RestorePlacement();
         Activated += OnFirstActivated;
@@ -243,6 +318,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         // activated, a real layout pass has already run, so this re-applies the actual measured
         // height instead.
         UpdateChromeLayout();
+
+        // Only from here on does the pane animate: whatever state it starts in, it is simply in.
+        _hasActivated = true;
     }
 
     private void OnActivationChanged(object sender, WindowActivatedEventArgs args)
@@ -384,6 +462,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private double _measuredTabStripHeight;
 
+    private double _measuredPageTop;
+
     /// <summary>
     /// The tab strip's rendered height, used to slide it off-screen in full screen or vertical
     /// tabs mode (see <see cref="UpdateChromeLayout"/>). <see cref="CustomDragRegion"/> is the
@@ -419,23 +499,13 @@ public sealed partial class MainWindow : Window, IShellWindow
         UpdateCursorWatch();
 
         UpdateVerticalTabsFlyout();
+        UpdateVerticalTabsPane();
+        UpdatePageInset();
 
-        // TabView renders the strip and the content in one control, so the only way to hide
-        // just the strip - for full screen, or because the vertical pane is standing in for it -
-        // is to slide it above the client area. A negative top margin on a stretched child grows
-        // it by the same amount, so it still fills its cell either way. This only fully hides the
-        // strip because TabStrip's own cell is anchored at y=0 in both modes (see the XAML
-        // comments) - were it pushed down by a reserved row instead, the strip would still
-        // occupy part of the now-visible band above that row, no matter the margin used.
-        TabStrip.Margin = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs
-            ? new Thickness(0, -TabStripHeight, 0, 0)
-            : new Thickness(0);
-
-        // The vertical mode drag region overlays the same top strip TabStrip just vacated,
-        // rather than reserving it, so it needs to match that same height to look intentional.
-        // It spans the full width and needs no offset for the pane: the pane floats above it in
-        // its own popup and takes that input itself rather than competing for it.
-        VerticalModeDragRegion.Height = TabStripHeight;
+        // The vertical mode bar only exists while the caption buttons are out; see
+        // UpdateVerticalCaptionBar.
+        UpdateVerticalCaptionBar();
+        UpdateWindowBorder(vertical);
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
@@ -443,9 +513,139 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     /// <summary>
+    /// Where the page goes. TabView renders the strip and the content in one control, so the only
+    /// way to hide just the strip - for full screen, or because the vertical pane is standing in
+    /// for it - is to slide it above the client area. A negative top margin on a stretched child
+    /// grows it by the same amount, so it still fills its cell either way. This only fully hides
+    /// the strip because TabStrip's own cell is anchored at y=0 in both modes (see the XAML
+    /// comments) - were it pushed down by a reserved row instead, the strip would still occupy
+    /// part of the now-visible band above that row, no matter the margin used.
+    /// </summary>
+    /// <remarks>
+    /// The left margin is the docked sidebar: pinned, the pane sits in a column of window
+    /// background beside the page instead of covering its left edge, the way Arc's and Zen's do.
+    /// Unpinned, the page takes the full width and the pane slides in over it on demand. The
+    /// pane itself is the same floating popup either way; docking only moves the page out from
+    /// under it.
+    /// </remarks>
+    private void UpdatePageInset()
+    {
+        var top = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs ? -PageTopInStrip : 0;
+
+        // The caption bar in vertical tabs mode takes its own row while it is out, pushing the
+        // page down, rather than being drawn over the top of the site.
+        if (IsVerticalChrome && _isCaptionRevealed)
+        {
+            top += VerticalCaptionBarHeight;
+        }
+
+        var left = IsVerticalTabsDocked ? VerticalTabsPaneWidth + (VerticalTabsPaneMargin * 2) : 0;
+        TabStrip.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    /// <summary>
+    /// How far down inside TabStrip the page actually starts - the distance the strip has to be
+    /// pushed up by for the page's first pixel to land on the window's first pixel.
+    /// </summary>
+    /// <remarks>
+    /// Measured from TabView's own content presenter rather than taken as the footer's height
+    /// (<see cref="TabStripHeight"/>). The two are meant to agree, but anything in the template
+    /// between the strip row and the content - padding, the strip's bottom border line - would
+    /// make the footer a few pixels short, and those pixels would show as a sliver of hidden
+    /// strip along the top of every page. This is exact whatever the template does. Falls back
+    /// to the footer height if the presenter is not there (a future template renaming it).
+    /// </remarks>
+    private double PageTopInStrip
+    {
+        get
+        {
+            if (_measuredPageTop <= 0 &&
+                TabStrip.FindDescendantByName("TabContentPresenter") is { ActualHeight: > 0 } presenter)
+            {
+                var offset = presenter.TransformToVisual(TabStrip).TransformPoint(new Point(0, 0)).Y;
+                if (offset > 0)
+                {
+                    _measuredPageTop = offset;
+                    DiagnosticLog.Write($"chrome: page top in strip={offset}, footer height={TabStripHeight}");
+                }
+            }
+
+            return _measuredPageTop > 0 ? _measuredPageTop : TabStripHeight;
+        }
+    }
+
+    private bool IsVerticalChrome => ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
+
+    /// <summary>
+    /// In vertical tabs mode the page runs to the top of the window, so the bar the caption
+    /// buttons sit on is either fully there or fully gone - never a transparent strip lying over
+    /// the site. Hidden, it is zero height: no tint, no buttons, and no drag region either, so
+    /// the top of the page takes clicks like the rest of it. Shown, it is a real row the page is
+    /// pushed down below (see <see cref="UpdatePageInset"/>), and the whole of it drags the
+    /// window. Horizontal mode needs none of this: there the buttons sit in the tab strip, which
+    /// is never over the page.
+    /// </summary>
+    private void UpdateVerticalCaptionBar()
+    {
+        // Resizing the element SetTitleBar was given is enough: WinUI re-derives the drag
+        // rectangle from its bounds, so at zero height there is no drag region at all.
+        VerticalModeDragRegion.Height = _isCaptionRevealed ? VerticalCaptionBarHeight : 0;
+        UpdatePageInset();
+    }
+
+    /// <summary>The border state last applied, so the DWM call is only made on a change.</summary>
+    private bool? _isWindowBorderHidden;
+
+    /// <summary>
+    /// Takes away the thin line Windows 11 draws round every window while vertical tabs is on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DWM paints that border on top of the client area, not outside it. Against a title bar it
+    /// is invisible, but in vertical tabs mode the page runs to the window's very top edge with
+    /// the caption bar hidden, and there it shows as a light edge across the top of the site -
+    /// exactly the one piece of non-website the mode is meant not to have.
+    /// <c>DWMWA_COLOR_NONE</c> removes it; going back to the tab strip restores the system
+    /// default. The window keeps its shadow and rounded corners either way, so it still reads
+    /// as a window against the desktop.
+    /// </para>
+    /// <para>
+    /// The attribute is Windows 11 (22000) only. Earlier, the call fails and nothing changes,
+    /// which is fine - Windows 10 draws no such border over the client area.
+    /// </para>
+    /// </remarks>
+    private void UpdateWindowBorder(bool hide)
+    {
+        if (_isWindowBorderHidden == hide)
+        {
+            return;
+        }
+
+        _isWindowBorderHidden = hide;
+        var color = hide ? DwmColorNone : DwmColorDefault;
+        var result = DwmSetWindowAttribute(WindowHandle, DwmwaBorderColor, ref color, sizeof(uint));
+        if (result != 0)
+        {
+            DiagnosticLog.Write($"chrome: border colour not applied (hr=0x{result:X8})");
+        }
+    }
+
+    private bool IsVerticalTabsDocked =>
+        ViewModel.IsVerticalTabsPaneVisible &&
+        ViewModel.IsVerticalTabsPinned &&
+        RootGrid.ActualWidth >= MinWidthToDockVerticalTabs;
+
+    /// <summary>
+    /// Clamped to the window's own size: on a narrow window a fixed 240px card would otherwise
+    /// hang off the edge rather than shrinking to fit inside it.
+    /// </summary>
+    private double VerticalTabsPaneWidth =>
+        Math.Min(VerticalTabsExpandedWidth, Math.Max(0, RootGrid.ActualWidth - (VerticalTabsPaneMargin * 2)));
+
+    /// <summary>
     /// Sizes and places the floating pane. A Popup does not stretch to anything, and its offsets
-    /// are relative to where it sits in the tree - the hover strip at the client area's top-left -
-    /// so both are set here rather than in XAML, and re-set whenever the window resizes.
+    /// are relative to where it sits in the tree - the client area's top-left - so both are set
+    /// here rather than in XAML, and re-set whenever the window resizes.
     /// </summary>
     private void UpdateVerticalTabsFlyout()
     {
@@ -457,12 +657,132 @@ public sealed partial class MainWindow : Window, IShellWindow
         VerticalTabsFlyout.HorizontalOffset = VerticalTabsPaneMargin;
         VerticalTabsFlyout.VerticalOffset = VerticalTabsPaneMargin;
 
-        // Clamped to the window's own size: on a narrow or short window a fixed 240px card would
-        // otherwise hang off the edge rather than shrinking to fit inside it.
-        VerticalTabsCard.Width = Math.Min(
-            VerticalTabsExpandedWidth,
-            Math.Max(0, RootGrid.ActualWidth - (VerticalTabsPaneMargin * 2)));
-        VerticalTabsCard.Height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
+        var width = VerticalTabsPaneWidth;
+        var height = Math.Max(0, RootGrid.ActualHeight - (VerticalTabsPaneMargin * 2));
+
+        VerticalTabsHost.Width = width;
+        VerticalTabsHost.Height = height;
+        VerticalTabsCard.Width = width;
+        VerticalTabsCard.Height = height;
+
+        // The card leaves by sliding its own width to the left; this keeps it from being drawn
+        // outside the pane's slot - past the window's edge - on the way.
+        VerticalTabsHost.Clip = new RectangleGeometry { Rect = new Rect(0, 0, width, height) };
+    }
+
+    /// <summary>
+    /// Slides the pane in or out to match <see cref="BrowserViewModel.IsVerticalTabsPaneExpanded"/>.
+    /// Idempotent and retargetable: called again mid-flight - the pointer coming back while the
+    /// pane is still leaving - it turns around from wherever the card currently is, rather than
+    /// jumping to either end first.
+    /// </summary>
+    /// <remarks>
+    /// Entrance and exit use the two Fluent motion curves: decelerate in, so the pane arrives
+    /// fast and settles; accelerate out, so it gets out of the way without hanging around. Both
+    /// slide and fade together, the fade being what keeps a half-way frame from reading as a
+    /// rendering glitch. The popup is only closed once the exit has actually finished.
+    /// </remarks>
+    private void UpdateVerticalTabsPane()
+    {
+        // Too early to open a windowed popup; RootGrid.Loaded calls back in once it is not.
+        if (!RootGrid.IsLoaded || RootGrid.XamlRoot is null)
+        {
+            return;
+        }
+
+        var show = ViewModel.IsVerticalTabsPaneExpanded;
+        if (show == _isVerticalTabsPaneShown)
+        {
+            return;
+        }
+
+        _isVerticalTabsPaneShown = show;
+        var generation = ++_paneAnimationGeneration;
+
+        var visual = ElementCompositionPreview.GetElementVisual(VerticalTabsCard);
+        var compositor = visual.Compositor;
+        var hidden = new Vector3(-(float)VerticalTabsPaneWidth, 0, 0);
+        var duration = PaneAnimationDuration(show);
+
+        if (show && !VerticalTabsFlyout.IsOpen)
+        {
+            // Coming from fully closed: put the card off-screen first, so the popup's first
+            // frame is the start of the slide rather than the finished pane flashing up.
+            SetPaneVisualState(visual, duration > 0 ? hidden : Vector3.Zero, duration > 0 ? 0 : 1);
+            VerticalTabsFlyout.IsOpen = true;
+        }
+
+        if (duration <= 0)
+        {
+            SetPaneVisualState(visual, show ? Vector3.Zero : hidden, show ? 1 : 0);
+            VerticalTabsFlyout.IsOpen = show;
+            return;
+        }
+
+        var easing = show
+            ? compositor.CreateCubicBezierEasingFunction(new Vector2(0.1f, 0.9f), new Vector2(0.2f, 1.0f))
+            : compositor.CreateCubicBezierEasingFunction(new Vector2(0.7f, 0.0f), new Vector2(1.0f, 0.5f));
+        var length = TimeSpan.FromMilliseconds(duration);
+
+        // No keyframe at 0 on purpose: a composition animation without one starts from the
+        // property's current value, which is what makes reversing mid-slide seamless.
+        var slide = compositor.CreateVector3KeyFrameAnimation();
+        slide.InsertKeyFrame(1.0f, show ? Vector3.Zero : hidden, easing);
+        slide.Duration = length;
+
+        var fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(1.0f, show ? 1.0f : 0.0f, easing);
+        fade.Duration = length;
+
+        var batch = compositor.CreateScopedBatch(CompositionBatchTypes.Animation);
+        visual.StartAnimation("Translation", slide);
+        visual.StartAnimation("Opacity", fade);
+        batch.End();
+
+        if (!show)
+        {
+            // Completed also fires when a newer animation cuts this one short, which is what the
+            // generation check is for: only the exit that actually ran to the end may close.
+            batch.Completed += (_, _) => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (generation == _paneAnimationGeneration && !_isVerticalTabsPaneShown)
+                {
+                    VerticalTabsFlyout.IsOpen = false;
+                }
+            });
+        }
+    }
+
+    private static void SetPaneVisualState(Visual visual, Vector3 translation, float opacity)
+    {
+        visual.StopAnimation("Translation");
+        visual.StopAnimation("Opacity");
+        visual.Properties.InsertVector3("Translation", translation);
+        visual.Opacity = opacity;
+    }
+
+    /// <summary>
+    /// The slide's length in milliseconds, or 0 for none: before the window has first appeared,
+    /// when the user has turned the slide off, or when Windows' own "Animation effects" is off.
+    /// </summary>
+    private int PaneAnimationDuration(bool show)
+    {
+        if (!_hasActivated || !_uiSettings.AnimationsEnabled)
+        {
+            return 0;
+        }
+
+        var milliseconds = AppServices.Settings.Current.VerticalTabsAnimationSpeed switch
+        {
+            SidebarAnimationSpeed.Off => 0,
+            SidebarAnimationSpeed.Fast => FastPaneAnimationMs,
+            SidebarAnimationSpeed.Relaxed => RelaxedPaneAnimationMs,
+            _ => NormalPaneAnimationMs,
+        };
+
+        // Exits are quicker than entrances: the pane arriving is something to look at, the pane
+        // leaving is just getting out of the way.
+        return show ? milliseconds : milliseconds * 3 / 4;
     }
 
     private void ApplyTheme() =>
@@ -571,6 +891,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         if (_isMinimized)
         {
             _cursorWatchTimer?.Stop();
+            _paneHoverLostAtTicks = 0;
             ViewModel.IsVerticalTabsPointerOver = false;
             SetCaptionRevealed(false);
             return;
@@ -632,10 +953,20 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         var still = Environment.TickCount64 - _cursorMovedAtTicks;
-        SetCursorPollRate(
-            still >= CursorIdleAfterMs ? IdleCursorPollMs
+        var rate = still >= CursorIdleAfterMs ? IdleCursorPollMs
             : still >= CursorRestingAfterMs ? RestingCursorPollMs
-            : CursorPollMs);
+            : CursorPollMs;
+
+        // An auto-hidden pane is the only way to reach the tabs, and backing off to the idle rate
+        // would make the first reach for it after a pause - reading a page, say - wait up to two
+        // seconds before anything happened. So while it is armed in the window being used, the
+        // back-off stops short. Not foreground, or pinned, and the full saving applies as before.
+        if (_isWindowActive && ViewModel.IsVerticalTabsPaneVisible && !ViewModel.IsVerticalTabsPinned)
+        {
+            rate = Math.Min(rate, ArmedCursorPollMs);
+        }
+
+        SetCursorPollRate(rate);
     }
 
     /// <summary>
@@ -658,20 +989,76 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     /// <summary>
-    /// One evaluation of both halves of "should the pane be open": the cursor is in the strip
-    /// down the left of this window's client area, or it is over the pane itself.
+    /// One evaluation of "should the pane be peeking": the cursor is in the strip down the left
+    /// of this window's client area, or the pane is out and the cursor is over it - or over a
+    /// menu it opened, such as a tab's context menu, which hangs outside the pane's bounds and
+    /// must not have the pane slide away from under it.
     /// </summary>
+    /// <remarks>
+    /// Evaluated whether or not the pane is pinned, so that unpinning it with the pointer still
+    /// on it (which is where the pin button is) leaves it out until the pointer actually goes,
+    /// rather than sliding it away and straight back on the next tick. Leaving only starts
+    /// <see cref="VerticalTabsHideDelayMs"/>; it is the delay running out that hides the pane.
+    /// </remarks>
     private void UpdateVerticalTabsHover()
     {
         // Another app in front: its window is over these coordinates, so the cursor being within
         // our edge band says nothing about what the user is pointing at.
         if (!ViewModel.IsVerticalTabsPaneVisible || GetForegroundWindow() != WindowHandle)
         {
+            _paneHoverLostAtTicks = 0;
             ViewModel.IsVerticalTabsPointerOver = false;
             return;
         }
 
-        ViewModel.IsVerticalTabsPointerOver = _pointerOverVerticalTabsCard || IsCursorAtLeftEdge();
+        var hovering = IsCursorAtLeftEdge() ||
+            (_isVerticalTabsPaneShown && (IsCursorOverPane() || HasOpenPaneMenu()));
+
+        if (hovering)
+        {
+            _paneHoverLostAtTicks = 0;
+            ViewModel.IsVerticalTabsPointerOver = true;
+            return;
+        }
+
+        if (!ViewModel.IsVerticalTabsPointerOver)
+        {
+            return;
+        }
+
+        var now = Environment.TickCount64;
+        if (_paneHoverLostAtTicks == 0)
+        {
+            _paneHoverLostAtTicks = now;
+        }
+        else if (now - _paneHoverLostAtTicks >= VerticalTabsHideDelayMs)
+        {
+            _paneHoverLostAtTicks = 0;
+            ViewModel.IsVerticalTabsPointerOver = false;
+        }
+    }
+
+    /// <summary>
+    /// Whether a menu or other popup is open in this window - a tab's context menu, the address
+    /// bar's suggestions - other than the pane itself and tooltips. The pane is only ever peeking
+    /// when this is asked, so any such popup is one the user is in the middle of using.
+    /// </summary>
+    private bool HasOpenPaneMenu()
+    {
+        if (RootGrid.XamlRoot is not { } root)
+        {
+            return false;
+        }
+
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(root))
+        {
+            if (popup != VerticalTabsFlyout && popup.Child is not ToolTip)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -729,6 +1116,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         TopChromeTint.Opacity = _isCaptionRevealed ? 1 : 0;
+        UpdateVerticalCaptionBar();
     }
 
     private bool IsCursorInCaptionZone()
@@ -765,22 +1153,54 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         var clientWidth = (int)Math.Round(RootGrid.ActualWidth * scale);
         var inset = (int)Math.Round(_captionInset * scale);
-        var barHeight = (int)Math.Round(TabStripHeight * scale);
+        var vertical = IsVerticalChrome;
+        var barHeight = (int)Math.Round((vertical ? VerticalCaptionBarHeight : TabStripHeight) * scale);
 
         var left = origin.X + clientWidth - inset - padding;
         var top = origin.Y - padding;
+
+        // In vertical tabs mode the revealed bar is the window's only title bar - the one place
+        // to drag the window from - so once it is out it stays out while the pointer is anywhere
+        // along it, not just near the buttons that summoned it.
+        if (vertical && _isCaptionRevealed &&
+            cursor.X >= origin.X - padding && cursor.X <= origin.X + clientWidth + padding &&
+            cursor.Y >= top && cursor.Y <= origin.Y + barHeight + padding)
+        {
+            return true;
+        }
 
         return cursor.X >= left && cursor.X <= origin.X + clientWidth + padding &&
                cursor.Y >= top && cursor.Y <= origin.Y + barHeight + reach + padding;
     }
 
-    private bool IsCursorAtLeftEdge()
+    private bool IsCursorAtLeftEdge() =>
+        TryGetCursorInClient(out var x, out var y) &&
+        x >= 0 && x < VerticalTabsHoverZoneWidth &&
+        y >= 0 && y < RootGrid.ActualHeight;
+
+    /// <summary>
+    /// Whether the cursor is within the pane's slot. Asked of the cursor position rather than
+    /// tracked from PointerEntered/PointerExited on the card: the card is in its own popup HWND
+    /// and the page in WebView2's, and an exit crossing between the two is not reliably raised -
+    /// a missed one would have left the pane stuck open.
+    /// </summary>
+    private bool IsCursorOverPane() =>
+        TryGetCursorInClient(out var x, out var y) &&
+        x >= VerticalTabsPaneMargin && x < VerticalTabsPaneMargin + VerticalTabsCard.Width &&
+        y >= VerticalTabsPaneMargin && y < VerticalTabsPaneMargin + VerticalTabsCard.Height;
+
+    /// <summary>The cursor's position relative to the client area's top-left, in DIPs.</summary>
+    private bool TryGetCursorInClient(out double x, out double y)
     {
+        x = y = 0;
+
         if (!GetCursorPos(out var cursor))
         {
             return false;
         }
 
+        // Anchored to the client area rather than to AppWindow.Position, which is the outer
+        // rect - see IsCursorInCaptionZone.
         var origin = default(POINT);
         if (!ClientToScreen(WindowHandle, ref origin))
         {
@@ -793,25 +1213,20 @@ public sealed partial class MainWindow : Window, IShellWindow
             scale = 1.0;
         }
 
-        var width = (int)Math.Round(VerticalTabsHoverZoneWidth * scale);
-        var height = (int)Math.Round(RootGrid.ActualHeight * scale);
-
-        return cursor.X >= origin.X && cursor.X < origin.X + width &&
-               cursor.Y >= origin.Y && cursor.Y < origin.Y + height;
+        x = (cursor.X - origin.X) / scale;
+        y = (cursor.Y - origin.Y) / scale;
+        return true;
     }
 
-    // The pane's own hover, folded into the poll above rather than driving the view model
-    // directly - so that leaving the pane for the page does not close it a tick before the poll
-    // would have agreed, and re-entering does not fight it.
-
+    /// <summary>
+    /// The one pointer event the pane still uses, purely so that it reacts the moment the pointer
+    /// lands on it rather than on the next poll tick. Leaving is the poll's call alone.
+    /// </summary>
     private void OnVerticalTabsPanePointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        _pointerOverVerticalTabsCard = true;
+        _paneHoverLostAtTicks = 0;
         ViewModel.IsVerticalTabsPointerOver = true;
     }
-
-    private void OnVerticalTabsPanePointerExited(object sender, PointerRoutedEventArgs e) =>
-        _pointerOverVerticalTabsCard = false;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
@@ -830,6 +1245,15 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
+
+    private const int DwmwaBorderColor = 34;
+
+    private const uint DwmColorNone = 0xFFFFFFFE;
+
+    private const uint DwmColorDefault = 0xFFFFFFFF;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref uint value, int size);
 
     /// <summary>
     /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to

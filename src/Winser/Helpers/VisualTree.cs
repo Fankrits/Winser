@@ -26,4 +26,25 @@ public static class VisualTree
 
         return null;
     }
+
+    /// <summary>Depth-first search for the first descendant with the given x:Name.</summary>
+    public static FrameworkElement? FindDescendantByName(this DependencyObject root, string name)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is FrameworkElement element && element.Name == name)
+            {
+                return element;
+            }
+
+            if (child.FindDescendantByName(name) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
 }

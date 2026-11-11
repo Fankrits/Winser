@@ -26,6 +26,17 @@ WinUI 3 desktop app. Page rendering is handled by the Microsoft Edge WebView2 ru
 - Link preview in the bottom-left corner, like every other browser
 - Session restore, with window placement remembered
 
+**Vertical tabs, Arc/Zen style** — turn on *Show tabs on the side* and the tabs, address bar
+and navigation move into a sidebar. Pinned, it docks beside the page. Set to auto-hide, the page
+gets the whole window and the sidebar slides in over it when the pointer reaches the left edge,
+then slides away again a moment after the pointer leaves — it stays put while one of its menus
+is open or its address bar is being typed in. The slide runs on the compositor thread, uses the
+Fluent decelerate/accelerate curves, reverses smoothly if you change your mind half-way, and
+has a speed setting (off / fast / normal / relaxed) that also honours Windows' own *Animation
+effects* switch. `Ctrl+Shift+S` flips between docked and auto-hide. Nothing of Winser's sits above the page in this
+mode: the bookmarks bar and the load progress bar step aside (loading shows as a ring round the
+tab's icon in the sidebar instead), and bookmarks are a `Ctrl+Shift+O` away.
+
 **Find on page** — implemented with the CSS Custom Highlight API, so matches are painted
 without injecting wrapper elements into the page. Match count, next/previous, and case
 sensitivity.
@@ -56,6 +67,10 @@ title bar is collapsed to zero height rather than the buttons being painted out 
 hide them: while content is extended into the title bar, the alpha channel is ignored on every
 title-bar colour but the button backgrounds, so a "transparent" glyph is an opaque one). What
 comes back is the system's own title bar, so snap layouts, tooltips and narration are intact.
+With tabs on the side the bar is fully gone at rest - nothing over the page, not even an
+invisible drag strip - and when it comes back it takes a row of its own, pushing the page down
+rather than covering the top of the site. Once out, it stays while the pointer is anywhere along
+it, so the whole bar can be used to drag the window.
 
 ## Keyboard shortcuts
 
@@ -73,6 +88,7 @@ comes back is the system's own title bar, so snap layouts, tooltips and narratio
 | `Ctrl+D` | Bookmark this page |
 | `Ctrl+H` / `Ctrl+J` / `Ctrl+Shift+O` | History / downloads / bookmarks |
 | `Ctrl+Shift+B` | Toggle the bookmarks bar |
+| `Ctrl+Shift+S` | Dock / auto-hide the vertical tabs sidebar |
 | `Ctrl+P` | Print |
 | `Ctrl+ +` / `Ctrl+ -` / `Ctrl+0` | Zoom in / out / reset |
 | `F11` / `F12` | Full screen / developer tools |

@@ -138,18 +138,18 @@
     </TabView>
 
     <!--
-      Vertical tabs mode's stand-in for TabStripFooter: the drag region and caption-button
-      clearance, since TabStrip's own footer is inside its (now hidden) native strip.
+      Vertical tabs mode's stand-in for TabStripFooter: the bar the caption buttons come back on,
+      and the window's drag region, since TabStrip's own footer is inside its (now hidden) strip.
 
-      An overlay (Top-aligned, Height set from code to match TabStripHeight), not a reserved
-      Grid row: TabStrip has to keep its cell anchored at y=0 for the strip-hiding trick below
-      to work at all, so there is no row left over here to occupy - "content starts at y=40"
-      and "the native strip is fully off-screen above y=0" are not simultaneously satisfiable
-      once TabStrip's own cell has been pushed down to y=40 by a reserved row, because the
-      strip and the content it hides above are one contiguous block inside TabView's template.
-      Overlaying instead of reserving space means this bar tints whatever content is directly
-      under it rather than displacing it - the same trade Windows 11 itself makes when content
-      scrolls under an extended, Mica-tinted title bar.
+      Fully there or fully gone, never a transparent layer over the site. At rest its Height is 0
+      - no tint, no buttons, no drag region - so the page runs to the top of the window and its
+      top edge takes clicks like the rest of it. When the pointer reaches the top-right corner,
+      MainWindow.UpdateVerticalCaptionBar gives it its height back and pushes the page down by
+      the same amount, so the bar has a row of its own rather than covering the top of the page.
+
+      Still Top-aligned in RootGrid's one cell rather than a Grid row of its own: TabStrip has
+      to stay anchored at y=0 for the strip-hiding trick (see UpdatePageInset), so the room for
+      the bar is made by the page's top margin instead.
     -->
     <Grid
       x:Name="VerticalModeDragRegion"
@@ -158,17 +158,14 @@
       Visibility="{x:Bind ViewModel.VerticalTabsPaneVisibility, Mode=OneWay}">
 
       <!--
-        The tint is a child rather than this Grid's own Background so that hiding it costs the
-        window nothing: the Grid stays laid out and stays the element handed to SetTitleBar, so
-        dragging the window by its top edge works whether the bar is showing or not. Transparent
+        The tint is a child rather than this Grid's own Background so the Grid itself can stay
+        the element handed to SetTitleBar in both states - only its height changes. Transparent
         rather than unset on the Grid for the usual reason - an unset Background is not
-        hit-testable, and this one has to be.
+        hit-testable, and this one has to be while the bar is out.
 
         Opacity is driven from MainWindow.ApplyCaptionReveal, along with the caption buttons
         this bar exists to make room for: page-first at rest, chrome when the pointer goes
-        looking for it. The transition is short and only on this half of the pair - the buttons
-        come back by the title bar being given its height again, which is not something there is
-        any way to animate; a slower fade here would leave them hanging over an empty bar.
+        looking for it.
       -->
       <Border x:Name="TopChromeTint" Background="{ThemeResource WinserChromeBrush}" Opacity="0">
         <Border.OpacityTransition>
@@ -199,17 +196,21 @@
       a windowed popup is broken by microsoft-ui-xaml#9276, so reordering tabs by dragging them
       within the pane may not work. That issue predates the WinAppSDK 2.3 this project builds
       against; if it still reproduces, reordering is the thing to give up, not the floating.
+
+      IsOpen is driven from code, not bound: the card slides and fades in after the popup opens,
+      and out before it closes (MainWindow.UpdateVerticalTabsPane). A binding would close the
+      popup the instant the view model said so, cutting the exit animation off before its first
+      frame. VerticalTabsHost is there only to clip: the card travels by its own width to get
+      off-screen, and without a clip it would be drawn out past the window's left edge, over the
+      desktop, on a window that is not maximized.
     -->
-    <Popup
-      x:Name="VerticalTabsFlyout"
-      ShouldConstrainToRootBounds="False"
-      IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
+    <Popup x:Name="VerticalTabsFlyout" ShouldConstrainToRootBounds="False">
+      <Grid x:Name="VerticalTabsHost">
       <Border
         x:Name="VerticalTabsCard"
         Background="{ThemeResource WinserPaneBrush}"
         CornerRadius="8"
-        PointerEntered="OnVerticalTabsPanePointerEntered"
-        PointerExited="OnVerticalTabsPanePointerExited">
+        PointerEntered="OnVerticalTabsPanePointerEntered">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
@@ -249,16 +250,14 @@
               FontSize="11"
               FontWeight="SemiBold"
               Foreground="White"
-              Text="InPrivate"
-              Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+              Text="InPrivate" />
           </Border>
           <Button
             Grid.Column="3"
             Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
             Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
             Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}" />
         </Grid>
 
         <!--  Nav buttons and address bar, standing in for BrowserTabPage's own toolbar (hidden
@@ -269,8 +268,7 @@
         <Grid
           Grid.Row="1"
           Margin="8,4,8,0"
-          ColumnSpacing="2"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}">
+          ColumnSpacing="2">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
@@ -309,7 +307,6 @@
           PlaceholderText="Search or enter web address"
           Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
           TextMemberPath="Text"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}"
           GotFocus="OnVerticalAddressGotFocus"
           LostFocus="OnVerticalAddressLostFocus"
           QuerySubmitted="OnVerticalAddressQuerySubmitted"
@@ -350,7 +347,7 @@
           ToolTipService.ToolTip="New tab (Ctrl+T)">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
-            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+            <TextBlock Text="New tab" />
           </StackPanel>
         </Button>
 
@@ -421,30 +418,43 @@
                   </MenuFlyout>
                 </Grid.ContextFlyout>
 
-                <IconSourceElement
-                  Width="16"
-                  Height="16"
-                  IconSource="{x:Bind TabIcon, Mode=OneWay}"
-                  VerticalAlignment="Center" />
+                <!--  A ring round the favicon while the tab loads: the sidebar's stand-in for the
+                      progress bar the page no longer has above it in this mode. IsActive rather
+                      than Visibility, so it needs no converter (x:Bind cannot use one anywhere in
+                      a Window) and an idle ring is not animating anything.  -->
+                <Grid Width="20" Height="20" VerticalAlignment="Center">
+                  <IconSourceElement
+                    Width="16"
+                    Height="16"
+                    HorizontalAlignment="Center"
+                    IconSource="{x:Bind TabIcon, Mode=OneWay}"
+                    VerticalAlignment="Center" />
+                  <ProgressRing
+                    Width="20"
+                    Height="20"
+                    MinWidth="0"
+                    MinHeight="0"
+                    IsActive="{x:Bind IsLoading, Mode=OneWay}"
+                    IsIndeterminate="True" />
+                </Grid>
                 <TextBlock
                   Grid.Column="1"
                   Text="{x:Bind Title, Mode=OneWay}"
                   TextTrimming="CharacterEllipsis"
-                  VerticalAlignment="Center"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+                  VerticalAlignment="Center" />
                 <Button
                   Grid.Column="2"
                   Command="{x:Bind CloseCommand}"
                   Content="&#xE711;"
                   Style="{StaticResource ToolbarIconButtonStyle}"
-                  ToolTipService.ToolTip="Close tab"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+                  ToolTipService.ToolTip="Close tab" />
               </Grid>
             </DataTemplate>
           </ListView.ItemTemplate>
         </ListView>
       </Grid>
       </Border>
+      </Grid>
     </Popup>
 
   </Grid>

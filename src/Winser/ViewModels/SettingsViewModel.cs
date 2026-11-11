@@ -122,6 +122,32 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Set(value, Values.UseVerticalTabs, v => Values.UseVerticalTabs = v);
     }
 
+    /// <summary>
+    /// The inverse of <see cref="AppSettings.VerticalTabsPinned"/>, phrased the way the setting
+    /// is shown: what turning it on does is make the pane hide.
+    /// </summary>
+    public bool AutoHideVerticalTabs
+    {
+        get => !Values.VerticalTabsPinned;
+        set => Set(!value, Values.VerticalTabsPinned, v => Values.VerticalTabsPinned = v);
+    }
+
+    public IReadOnlyList<string> SidebarAnimationOptions { get; } =
+        ["Off", "Fast", "Normal", "Relaxed"];
+
+    public int SidebarAnimationIndex
+    {
+        get => (int)Values.VerticalTabsAnimationSpeed;
+        set
+        {
+            // A ComboBox reports -1 while its items are being swapped out; that is not a choice.
+            if (value >= 0 && value < SidebarAnimationOptions.Count)
+            {
+                Set(value, (int)Values.VerticalTabsAnimationSpeed, v => Values.VerticalTabsAnimationSpeed = (SidebarAnimationSpeed)v);
+            }
+        }
+    }
+
     public bool OpenPopupsAsTabs
     {
         get => Values.OpenPopupsAsTabs;

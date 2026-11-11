@@ -174,7 +174,11 @@ public static class Scripts
             if (!fn && !e.ctrlKey && !e.altKey) { return; }
 
             const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-            if (!fn && !OWNED.has(key) && !NAMED.has(key)) { return; }
+
+            // Ctrl+Shift+S (show/hide the vertical tabs sidebar) is taken as that exact chord
+            // only, not via OWNED: plain Ctrl+S is "save" in too many web apps to steal.
+            const sidebar = key === 's' && e.ctrlKey && e.shiftKey && !e.altKey;
+            if (!fn && !sidebar && !OWNED.has(key) && !NAMED.has(key)) { return; }
 
             window.chrome.webview.postMessage(JSON.stringify({
               t: 'key', key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey,

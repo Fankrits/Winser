@@ -461,11 +461,20 @@
       as long as the tab exists. Bound, the animation is torn down when loading finishes
       instead of merely hidden. Visibility stays: it is what reserves no space in the layout.
     -->
-    <ProgressBar
+    <!--
+      Wrapped so it goes wherever the toolbar goes: in full screen and in vertical tabs mode the
+      page is meant to be the whole window, and this bar appearing above it would push the site
+      down by 2px for every load. Vertical tabs mode shows loading in the sidebar instead (a
+      ring round the tab's icon, and the reload button turning to stop).
+    -->
+    <Grid
       Grid.Row="2"
-      Height="2"
-      IsIndeterminate="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
-      Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+      Visibility="{x:Bind ViewModel.Shell.IsToolbarVisible, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+      <ProgressBar
+        Height="2"
+        IsIndeterminate="{x:Bind ViewModel.IsLoading, Mode=OneWay}"
+        Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+    </Grid>
 
     <!--  ============================== content ==============================  -->
     <Grid Grid.Row="3">
