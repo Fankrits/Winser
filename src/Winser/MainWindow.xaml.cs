@@ -505,6 +505,7 @@ public sealed partial class MainWindow : Window, IShellWindow
         // The vertical mode bar only exists while the caption buttons are out; see
         // UpdateVerticalCaptionBar.
         UpdateVerticalCaptionBar();
+        UpdateWindowBorder(vertical);
 
         // In vertical mode CustomDragRegion is inside that now-hidden strip, so dragging and the
         // caption buttons need to be re-anchored to VerticalModeDragRegion instead.
@@ -590,6 +591,43 @@ public sealed partial class MainWindow : Window, IShellWindow
         // rectangle from its bounds, so at zero height there is no drag region at all.
         VerticalModeDragRegion.Height = _isCaptionRevealed ? VerticalCaptionBarHeight : 0;
         UpdatePageInset();
+    }
+
+    /// <summary>The border state last applied, so the DWM call is only made on a change.</summary>
+    private bool? _isWindowBorderHidden;
+
+    /// <summary>
+    /// Takes away the thin line Windows 11 draws round every window while vertical tabs is on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DWM paints that border on top of the client area, not outside it. Against a title bar it
+    /// is invisible, but in vertical tabs mode the page runs to the window's very top edge with
+    /// the caption bar hidden, and there it shows as a light edge across the top of the site -
+    /// exactly the one piece of non-website the mode is meant not to have.
+    /// <c>DWMWA_COLOR_NONE</c> removes it; going back to the tab strip restores the system
+    /// default. The window keeps its shadow and rounded corners either way, so it still reads
+    /// as a window against the desktop.
+    /// </para>
+    /// <para>
+    /// The attribute is Windows 11 (22000) only. Earlier, the call fails and nothing changes,
+    /// which is fine - Windows 10 draws no such border over the client area.
+    /// </para>
+    /// </remarks>
+    private void UpdateWindowBorder(bool hide)
+    {
+        if (_isWindowBorderHidden == hide)
+        {
+            return;
+        }
+
+        _isWindowBorderHidden = hide;
+        var color = hide ? DwmColorNone : DwmColorDefault;
+        var result = DwmSetWindowAttribute(WindowHandle, DwmwaBorderColor, ref color, sizeof(uint));
+        if (result != 0)
+        {
+            DiagnosticLog.Write($"chrome: border colour not applied (hr=0x{result:X8})");
+        }
     }
 
     private bool IsVerticalTabsDocked =>
@@ -1207,6 +1245,15 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
+
+    private const int DwmwaBorderColor = 34;
+
+    private const uint DwmColorNone = 0xFFFFFFFE;
+
+    private const uint DwmColorDefault = 0xFFFFFFFF;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref uint value, int size);
 
     /// <summary>
     /// SelectedItem binds one-way rather than two-way: this list and TabStrip both need to
