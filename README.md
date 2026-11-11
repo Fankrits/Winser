@@ -33,7 +33,9 @@ then slides away again a moment after the pointer leaves — it stays put while 
 is open or its address bar is being typed in. The slide runs on the compositor thread, uses the
 Fluent decelerate/accelerate curves, reverses smoothly if you change your mind half-way, and
 has a speed setting (off / fast / normal / relaxed) that also honours Windows' own *Animation
-effects* switch. `Ctrl+Shift+S` flips between docked and auto-hide.
+effects* switch. `Ctrl+Shift+S` flips between docked and auto-hide. Nothing of Winser's sits above the page in this
+mode: the bookmarks bar and the load progress bar step aside (loading shows as a ring round the
+tab's icon in the sidebar instead), and bookmarks are a `Ctrl+Shift+O` away.
 
 **Find on page** — implemented with the CSS Custom Highlight API, so matches are painted
 without injecting wrapper elements into the page. Match count, next/previous, and case

@@ -66,7 +66,7 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneVisible), nameof(VerticalTabsPaneVisibility), nameof(IsToolbarVisible))]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded), nameof(IsBookmarksBarVisible))]
     public partial bool UseVerticalTabs { get; set; }
 
     [ObservableProperty]
@@ -138,8 +138,15 @@ public sealed partial class BrowserViewModel : ObservableObject
 
     public string WindowTitle => IsPrivate ? "Winser — InPrivate" : "Winser";
 
-    /// <summary>Full screen hides all chrome, the bookmarks bar included.</summary>
-    public bool IsBookmarksBarVisible => ShowBookmarksBar && !IsFullScreen;
+    /// <summary>
+    /// Full screen hides all chrome, the bookmarks bar included - and so does vertical tabs mode,
+    /// where the page is meant to fill the window with nothing of Winser's above it. Left on, the
+    /// bar was the one strip of browser chrome still sitting across the top of every page, under
+    /// the caption bar - and with no bookmarks in it, an empty one. Bookmarks stay one keystroke
+    /// away there (Ctrl+Shift+O), and the setting itself is untouched, so switching back to tabs
+    /// along the top brings the bar back as it was.
+    /// </summary>
+    public bool IsBookmarksBarVisible => ShowBookmarksBar && !IsFullScreen && !UseVerticalTabs;
 
     /// <summary>Full screen hides all chrome, the vertical tab pane included.</summary>
     public bool IsVerticalTabsPaneVisible => UseVerticalTabs && !IsFullScreen;

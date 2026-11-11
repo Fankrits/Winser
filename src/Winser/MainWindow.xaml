@@ -418,11 +418,25 @@
                   </MenuFlyout>
                 </Grid.ContextFlyout>
 
-                <IconSourceElement
-                  Width="16"
-                  Height="16"
-                  IconSource="{x:Bind TabIcon, Mode=OneWay}"
-                  VerticalAlignment="Center" />
+                <!--  A ring round the favicon while the tab loads: the sidebar's stand-in for the
+                      progress bar the page no longer has above it in this mode. IsActive rather
+                      than Visibility, so it needs no converter (x:Bind cannot use one anywhere in
+                      a Window) and an idle ring is not animating anything.  -->
+                <Grid Width="20" Height="20" VerticalAlignment="Center">
+                  <IconSourceElement
+                    Width="16"
+                    Height="16"
+                    HorizontalAlignment="Center"
+                    IconSource="{x:Bind TabIcon, Mode=OneWay}"
+                    VerticalAlignment="Center" />
+                  <ProgressRing
+                    Width="20"
+                    Height="20"
+                    MinWidth="0"
+                    MinHeight="0"
+                    IsActive="{x:Bind IsLoading, Mode=OneWay}"
+                    IsIndeterminate="True" />
+                </Grid>
                 <TextBlock
                   Grid.Column="1"
                   Text="{x:Bind Title, Mode=OneWay}"
