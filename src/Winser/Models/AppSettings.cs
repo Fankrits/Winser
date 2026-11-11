@@ -18,6 +18,19 @@ public enum TrackingPrevention
     Strict = 3,
 }
 
+/// <summary>
+/// How quickly the auto-hiding vertical tabs pane slides in and out. Index-aligned with the
+/// options list in <c>SettingsViewModel</c>, so the order here is the order shown.
+/// </summary>
+public enum SidebarAnimationSpeed
+{
+    /// <summary>No slide: the pane simply appears and disappears.</summary>
+    Off = 0,
+    Fast = 1,
+    Normal = 2,
+    Relaxed = 3,
+}
+
 public enum StartupBehavior
 {
     NewTabPage = 0,
@@ -45,10 +58,14 @@ public sealed class AppSettings
     public bool UseVerticalTabs { get; set; }
 
     /// <summary>
-    /// When vertical tabs are on: whether the pane stays expanded, rather than collapsing to an
-    /// icon-only rail that only expands while the pointer is over it.
+    /// When vertical tabs are on: whether the pane stays docked beside the page, the way a
+    /// pinned sidebar does in Arc or Zen. Unpinned, it auto-hides completely and slides back in
+    /// over the page when the pointer reaches the window's left edge.
     /// </summary>
     public bool VerticalTabsPinned { get; set; } = true;
+
+    /// <summary>How fast the auto-hiding vertical tabs pane slides in and out.</summary>
+    public SidebarAnimationSpeed VerticalTabsAnimationSpeed { get; set; } = SidebarAnimationSpeed.Normal;
 
     /// <summary>Open <c>window.open</c> popups as tabs instead of letting sites spawn windows.</summary>
     public bool OpenPopupsAsTabs { get; set; } = true;

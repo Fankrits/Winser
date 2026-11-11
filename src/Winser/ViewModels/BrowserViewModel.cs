@@ -70,14 +70,18 @@ public sealed partial class BrowserViewModel : ObservableObject
     public partial bool UseVerticalTabs { get; set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
-    [NotifyPropertyChangedFor(nameof(PinGlyph), nameof(PinTooltip))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(PinGlyph), nameof(PinTooltip))]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsPinned { get; set; }
 
-    /// <summary>True while the pointer is over the collapsed vertical tabs hover-zone, expanding the pane as a peek.</summary>
+    /// <summary>
+    /// True while the pointer is at the window's left edge or over the pane, revealing the
+    /// auto-hidden pane as a peek. Cleared by the window only after a short grace period once the
+    /// pointer has gone (see MainWindow.UpdateVerticalTabsHover), so overshooting the pane by a
+    /// few pixels does not snap it shut.
+    /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded))]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsPointerOver { get; set; }
 
@@ -88,7 +92,7 @@ public sealed partial class BrowserViewModel : ObservableObject
     /// focusing it needs it visible first, and hovering is not itself a keyboard-reachable action.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded), nameof(VerticalTabsExpandedVisibility))]
+    [NotifyPropertyChangedFor(nameof(IsVerticalTabsExpanded))]
     [NotifyPropertyChangedFor(nameof(IsVerticalTabsPaneExpanded))]
     public partial bool IsVerticalTabsAddressBarFocused { get; set; }
 
@@ -151,11 +155,11 @@ public sealed partial class BrowserViewModel : ObservableObject
     public bool IsVerticalTabsExpanded => IsVerticalTabsPinned || IsVerticalTabsPointerOver || IsVerticalTabsAddressBarFocused;
 
     /// <summary>
-    /// Whether the pane's actual chrome - background, header, nav row, address bar, tab list -
-    /// should be on screen. Bound straight to the floating pane's Popup.IsOpen (see
-    /// MainWindow.xaml). Collapsed, vertical tabs shows nothing, not even an icon rail; all that
-    /// is left in the window itself is a transparent strip down the left edge, there purely to
-    /// notice the pointer arriving.
+    /// Whether the pane - background, header, nav row, address bar, tab list - should be on
+    /// screen. The window animates towards this rather than binding Popup.IsOpen to it (see
+    /// MainWindow.UpdateVerticalTabsPane): the pane slides in when it turns true, and slides out
+    /// before the popup actually closes when it turns false. Collapsed, vertical tabs shows
+    /// nothing, not even an icon rail; the trigger is the cursor reaching the left edge.
     /// </summary>
     public bool IsVerticalTabsPaneExpanded => IsVerticalTabsPaneVisible && IsVerticalTabsExpanded;
 
@@ -165,15 +169,15 @@ public sealed partial class BrowserViewModel : ObservableObject
     // the already-converted Visibility here is the documented workaround.
     public Visibility VerticalTabsPaneVisibility => IsVerticalTabsPaneVisible ? Visibility.Visible : Visibility.Collapsed;
 
-    public Visibility VerticalTabsExpandedVisibility => IsVerticalTabsExpanded ? Visibility.Visible : Visibility.Collapsed;
-
     public string FullScreenGlyph => IsFullScreen ? Glyphs.BackToWindow : Glyphs.FullScreen;
 
     public string FullScreenTooltip => IsFullScreen ? "Exit full screen (F11)" : "Full screen (F11)";
 
     public string PinGlyph => IsVerticalTabsPinned ? Glyphs.Unpin : Glyphs.Pin;
 
-    public string PinTooltip => IsVerticalTabsPinned ? "Unpin the tab pane" : "Keep the tab pane open";
+    public string PinTooltip => IsVerticalTabsPinned
+        ? "Auto-hide the sidebar (Ctrl+Shift+S)"
+        : "Keep the sidebar open (Ctrl+Shift+S)";
 
     public void AttachWindow(IShellWindow window) => _window = window;
 
@@ -649,6 +653,9 @@ public sealed partial class BrowserViewModel : ObservableObject
             case VirtualKey.B when ctrl && shift:
                 ToggleBookmarksBar();
                 return true;
+            case VirtualKey.S when ctrl && shift && !alt && IsVerticalTabsPaneVisible:
+                ToggleVerticalTabsPinned();
+                return true;
             case VirtualKey.P when ctrl:
                 tab?.PrintCommand.Execute(null);
                 return true;
@@ -840,6 +847,10 @@ public sealed partial class BrowserViewModel : ObservableObject
         }
 
         UseVerticalTabs = AppServices.Settings.Current.UseVerticalTabs;
+
+        // Also how the pin button in one window reaches every other one: it commits the setting,
+        // and this picks it up. A no-op in the window that pressed it, which already matches.
+        IsVerticalTabsPinned = AppServices.Settings.Current.VerticalTabsPinned;
 
         foreach (var tab in Tabs)
         {

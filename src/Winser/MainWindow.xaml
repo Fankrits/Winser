@@ -199,17 +199,21 @@
       a windowed popup is broken by microsoft-ui-xaml#9276, so reordering tabs by dragging them
       within the pane may not work. That issue predates the WinAppSDK 2.3 this project builds
       against; if it still reproduces, reordering is the thing to give up, not the floating.
+
+      IsOpen is driven from code, not bound: the card slides and fades in after the popup opens,
+      and out before it closes (MainWindow.UpdateVerticalTabsPane). A binding would close the
+      popup the instant the view model said so, cutting the exit animation off before its first
+      frame. VerticalTabsHost is there only to clip: the card travels by its own width to get
+      off-screen, and without a clip it would be drawn out past the window's left edge, over the
+      desktop, on a window that is not maximized.
     -->
-    <Popup
-      x:Name="VerticalTabsFlyout"
-      ShouldConstrainToRootBounds="False"
-      IsOpen="{x:Bind ViewModel.IsVerticalTabsPaneExpanded, Mode=OneWay}">
+    <Popup x:Name="VerticalTabsFlyout" ShouldConstrainToRootBounds="False">
+      <Grid x:Name="VerticalTabsHost">
       <Border
         x:Name="VerticalTabsCard"
         Background="{ThemeResource WinserPaneBrush}"
         CornerRadius="8"
-        PointerEntered="OnVerticalTabsPanePointerEntered"
-        PointerExited="OnVerticalTabsPanePointerExited">
+        PointerEntered="OnVerticalTabsPanePointerEntered">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto" />
@@ -249,16 +253,14 @@
               FontSize="11"
               FontWeight="SemiBold"
               Foreground="White"
-              Text="InPrivate"
-              Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+              Text="InPrivate" />
           </Border>
           <Button
             Grid.Column="3"
             Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
             Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
             Style="{StaticResource ToolbarIconButtonStyle}"
-            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
-            Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+            ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}" />
         </Grid>
 
         <!--  Nav buttons and address bar, standing in for BrowserTabPage's own toolbar (hidden
@@ -269,8 +271,7 @@
         <Grid
           Grid.Row="1"
           Margin="8,4,8,0"
-          ColumnSpacing="2"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}">
+          ColumnSpacing="2">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
@@ -309,7 +310,6 @@
           PlaceholderText="Search or enter web address"
           Text="{x:Bind ViewModel.SelectedTab.AddressText, Mode=OneWay}"
           TextMemberPath="Text"
-          Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}"
           GotFocus="OnVerticalAddressGotFocus"
           LostFocus="OnVerticalAddressLostFocus"
           QuerySubmitted="OnVerticalAddressQuerySubmitted"
@@ -350,7 +350,7 @@
           ToolTipService.ToolTip="New tab (Ctrl+T)">
           <StackPanel Orientation="Horizontal" Spacing="10">
             <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
-            <TextBlock Text="New tab" Visibility="{x:Bind ViewModel.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+            <TextBlock Text="New tab" />
           </StackPanel>
         </Button>
 
@@ -430,21 +430,20 @@
                   Grid.Column="1"
                   Text="{x:Bind Title, Mode=OneWay}"
                   TextTrimming="CharacterEllipsis"
-                  VerticalAlignment="Center"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+                  VerticalAlignment="Center" />
                 <Button
                   Grid.Column="2"
                   Command="{x:Bind CloseCommand}"
                   Content="&#xE711;"
                   Style="{StaticResource ToolbarIconButtonStyle}"
-                  ToolTipService.ToolTip="Close tab"
-                  Visibility="{x:Bind Shell.VerticalTabsExpandedVisibility, Mode=OneWay}" />
+                  ToolTipService.ToolTip="Close tab" />
               </Grid>
             </DataTemplate>
           </ListView.ItemTemplate>
         </ListView>
       </Grid>
       </Border>
+      </Grid>
     </Popup>
 
   </Grid>
