@@ -462,6 +462,8 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private double _measuredTabStripHeight;
 
+    private double _measuredPageTop;
+
     /// <summary>
     /// The tab strip's rendered height, used to slide it off-screen in full screen or vertical
     /// tabs mode (see <see cref="UpdateChromeLayout"/>). <see cref="CustomDragRegion"/> is the
@@ -527,7 +529,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </remarks>
     private void UpdatePageInset()
     {
-        var top = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs ? -TabStripHeight : 0;
+        var top = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs ? -PageTopInStrip : 0;
 
         // The caption bar in vertical tabs mode takes its own row while it is out, pushing the
         // page down, rather than being drawn over the top of the site.
@@ -538,6 +540,37 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         var left = IsVerticalTabsDocked ? VerticalTabsPaneWidth + (VerticalTabsPaneMargin * 2) : 0;
         TabStrip.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    /// <summary>
+    /// How far down inside TabStrip the page actually starts - the distance the strip has to be
+    /// pushed up by for the page's first pixel to land on the window's first pixel.
+    /// </summary>
+    /// <remarks>
+    /// Measured from TabView's own content presenter rather than taken as the footer's height
+    /// (<see cref="TabStripHeight"/>). The two are meant to agree, but anything in the template
+    /// between the strip row and the content - padding, the strip's bottom border line - would
+    /// make the footer a few pixels short, and those pixels would show as a sliver of hidden
+    /// strip along the top of every page. This is exact whatever the template does. Falls back
+    /// to the footer height if the presenter is not there (a future template renaming it).
+    /// </remarks>
+    private double PageTopInStrip
+    {
+        get
+        {
+            if (_measuredPageTop <= 0 &&
+                TabStrip.FindDescendantByName("TabContentPresenter") is { ActualHeight: > 0 } presenter)
+            {
+                var offset = presenter.TransformToVisual(TabStrip).TransformPoint(new Point(0, 0)).Y;
+                if (offset > 0)
+                {
+                    _measuredPageTop = offset;
+                    DiagnosticLog.Write($"chrome: page top in strip={offset}, footer height={TabStripHeight}");
+                }
+            }
+
+            return _measuredPageTop > 0 ? _measuredPageTop : TabStripHeight;
+        }
     }
 
     private bool IsVerticalChrome => ViewModel.UseVerticalTabs && !ViewModel.IsFullScreen;
