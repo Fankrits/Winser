@@ -37,6 +37,12 @@ effects* switch. `Ctrl+Shift+S` flips between docked and auto-hide. Nothing of W
 mode: the bookmarks bar and the load progress bar step aside (loading shows as a ring round the
 tab's icon in the sidebar instead), and bookmarks are a `Ctrl+Shift+O` away.
 
+The sidebar carries everything the horizontal toolbar does: back, forward, reload and home, the
+bookmark star, a mute button while a tab is playing audio and a zoom reset while it is zoomed,
+then the address bar, *New tab* and the tab list. Along the bottom, *Downloads* sits at the left
+(with a dot while a transfer is running) and the *Settings and more* menu at the right. The
+native tab strip is collapsed outright in this mode, not just scrolled out of view.
+
 **Find on page** — implemented with the CSS Custom Highlight API, so matches are painted
 without injecting wrapper elements into the page. Match count, next/previous, and case
 sensitivity.

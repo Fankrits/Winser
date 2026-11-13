@@ -62,6 +62,19 @@ public sealed partial class BrowserTabViewModel : ObservableObject
     [ObservableProperty]
     public partial ImageSource? FaviconImage { get; set; }
 
+    /// <summary>
+    /// Whether this tab's icon is the page's own favicon rather than a glyph. The sidebar draws
+    /// the favicon in a fixed 16x16 <c>Image</c> and the glyph in a <c>FontIcon</c> - an
+    /// <c>IconSourceElement</c> hands a favicon its natural size, so a 32px or 64px one would
+    /// overflow the row. TabView's own tab headers keep using <see cref="TabIcon"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowsFavicon { get; set; }
+
+    /// <summary>The glyph drawn when <see cref="ShowsFavicon"/> is false.</summary>
+    [ObservableProperty]
+    public partial string IconGlyph { get; set; } = Glyphs.Globe;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ReloadGlyph), nameof(ReloadTooltip))]
     public partial bool IsLoading { get; set; }
@@ -865,6 +878,20 @@ public sealed partial class BrowserTabViewModel : ObservableObject
 
     private void RefreshIcon()
     {
+        var isNative = Kind is BrowserTabKind.Settings or BrowserTabKind.History
+            or BrowserTabKind.Downloads or BrowserTabKind.Bookmarks;
+
+        ShowsFavicon = !isNative && FaviconImage is not null;
+        IconGlyph = Kind switch
+        {
+            BrowserTabKind.Settings => Glyphs.Settings,
+            BrowserTabKind.History => Glyphs.History,
+            BrowserTabKind.Downloads => Glyphs.Download,
+            BrowserTabKind.Bookmarks => Glyphs.FavoriteList,
+            _ when IsNewTabPage => Glyphs.Add,
+            _ => Glyphs.Globe,
+        };
+
         TabIcon = Kind switch
         {
             BrowserTabKind.Settings => GlyphIcon(Glyphs.Settings),

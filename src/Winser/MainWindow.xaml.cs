@@ -36,7 +36,9 @@ public sealed partial class MainWindow : Window, IShellWindow
     // reserves roughly the outer 8px of a resizable window for its own resize-drag hit-testing,
     // and a band inside that is awkward to hit deliberately.
     private const double VerticalTabsHoverZoneWidth = 16;
-    private const double VerticalTabsExpandedWidth = 240;
+    // Wide enough for the nav row at its fullest: four 32px buttons on the left, and bookmark,
+    // mute and a 44px zoom label on the right, inside the 8px gutters.
+    private const double VerticalTabsExpandedWidth = 260;
 
     /// <summary>
     /// Gap between the expanded pane and the window's top, left and bottom edges, so it reads as
@@ -530,7 +532,13 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// </remarks>
     private void UpdatePageInset()
     {
-        var top = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs ? -PageTopInStrip : 0;
+        var hideStrip = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs;
+
+        // Preferably the strip is collapsed outright, so there is no tab row anywhere - not
+        // above the window, not behind the page. Only when TabView's template cannot be found
+        // (or has not loaded yet) does it fall back to sliding the strip off the top.
+        var stripCollapsed = SetTabStripCollapsed(hideStrip);
+        var top = hideStrip && !stripCollapsed ? -PageTopInStrip : 0;
 
         // The caption bar in vertical tabs mode takes its own row while it is out, pushing the
         // page down, rather than being drawn over the top of the site.
@@ -541,6 +549,29 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         var left = IsVerticalTabsDocked ? VerticalTabsPaneWidth + (VerticalTabsPaneMargin * 2) : 0;
         TabStrip.Margin = new Thickness(left, top, 0, 0);
+    }
+
+    /// <summary>
+    /// Collapses or restores the row of tabs inside TabView - the header, the tabs themselves,
+    /// the add button and the footer - leaving just the content presenter, so the page fills the
+    /// whole control. Returns whether the strip is now collapsed, which is false when the part
+    /// cannot be found: before the template has loaded, or if a future TabView renames it.
+    /// </summary>
+    private bool SetTabStripCollapsed(bool collapsed)
+    {
+        if (TabStrip.FindDescendantByName("TabContainerGrid") is not { } container)
+        {
+            return false;
+        }
+
+        var visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+        if (container.Visibility != visibility)
+        {
+            container.Visibility = visibility;
+            DiagnosticLog.Write($"chrome: tab strip {(collapsed ? "collapsed" : "restored")}");
+        }
+
+        return collapsed;
     }
 
     /// <summary>
@@ -784,6 +815,17 @@ public sealed partial class MainWindow : Window, IShellWindow
         // leaving is just getting out of the way.
         return show ? milliseconds : milliseconds * 3 / 4;
     }
+
+    // ------------------------------------------------------------- x:Bind helpers
+    //
+    // x:Bind cannot use a converter from a Window's XAML - a Window has no Resources to look
+    // one up in - but it can call a static method, which is all a bool-to-Visibility needs.
+
+    public static Visibility Show(bool visible) => visible ? Visibility.Visible : Visibility.Collapsed;
+
+    public static Visibility Hide(bool hidden) => hidden ? Visibility.Collapsed : Visibility.Visible;
+
+    public static Visibility ShowIfEmpty(int count) => count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     private void ApplyTheme() =>
         ThemeHelper.Apply(RootGrid, AppWindow, AppServices.Settings.Current.Theme);

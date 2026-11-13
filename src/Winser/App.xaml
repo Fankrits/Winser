@@ -86,6 +86,31 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
       </Style>
 
+      <!--
+        The vertical tabs sidebar's own buttons. ToolbarIconButtonStyle is 34x32 because the
+        horizontal toolbar has a 44px bar to fill; in a 260px-wide pane that size crowds the
+        nav row and, inside a tab row, made every tab ~50px tall. These are a uniform 32x32 for
+        the header, nav row and footer, and a 24x24 for the close button inside a tab row.
+      -->
+      <Style x:Key="SidebarIconButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
+        <Setter Property="MinWidth" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+      </Style>
+
+      <Style x:Key="SidebarTabCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolbarIconButtonStyle}">
+        <Setter Property="MinWidth" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+      </Style>
+
       <Style x:Key="ToolbarToggleButtonStyle" TargetType="ToggleButton" BasedOn="{StaticResource DefaultToggleButtonStyle}">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
@@ -140,6 +165,10 @@
       -->
       <Style x:Key="VerticalTabItemStyle" TargetType="ListViewItem" BasedOn="{StaticResource SidebarListItemStyle}">
         <Setter Property="CornerRadius" Value="8" />
+        <!--  A fixed 36px row with a short right edge for the close button, instead of the
+              shared 12,9 padding that stacked on a 34x32 close button to make ~50px rows.  -->
+        <Setter Property="Padding" Value="10,0,4,0" />
+        <Setter Property="MinHeight" Value="36" />
       </Style>
 
     </ResourceDictionary>

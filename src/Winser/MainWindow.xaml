@@ -4,6 +4,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
   xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:local="using:Winser"
   xmlns:views="using:Winser.Views"
   xmlns:vm="using:Winser.ViewModels"
   mc:Ignorable="d">
@@ -218,14 +219,15 @@
           <RowDefinition Height="Auto" />
           <RowDefinition Height="Auto" />
           <RowDefinition Height="*" />
+          <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!--  App mark, InPrivate badge, and the pin toggle - the pane's own header, matching
-              TabStripHeader/TabStripFooter's job in horizontal mode.  -->
+        <!--  Header: app mark, InPrivate badge, and the pin toggle - the pane's own stand-in for
+              TabStripHeader/TabStripFooter in horizontal mode.  -->
         <Grid
           Grid.Row="0"
           Height="40"
-          Padding="12,0,6,0"
+          Padding="12,0,8,0"
           ColumnSpacing="8">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -254,22 +256,29 @@
           </Border>
           <Button
             Grid.Column="3"
+            AutomationProperties.Name="{x:Bind ViewModel.PinTooltip, Mode=OneWay}"
             Command="{x:Bind ViewModel.ToggleVerticalTabsPinnedCommand}"
             Content="{x:Bind ViewModel.PinGlyph, Mode=OneWay}"
-            Style="{StaticResource ToolbarIconButtonStyle}"
+            Style="{StaticResource SidebarIconButtonStyle}"
             ToolTipService.ToolTip="{x:Bind ViewModel.PinTooltip, Mode=OneWay}" />
         </Grid>
 
-        <!--  Nav buttons and address bar, standing in for BrowserTabPage's own toolbar (hidden
-              while vertical tabs is on, see BrowserViewModel.IsToolbarVisible) - both act on
-              whichever tab is currently selected, so every binding here is explicitly OneWay:
-              SelectedTab changes as the user switches tabs, unlike BrowserTabPage's own ViewModel,
-              which is fixed to one tab for that page's whole lifetime.  -->
+        <!--  Everything BrowserTabPage's own toolbar carries (hidden while vertical tabs is on,
+              see BrowserViewModel.IsToolbarVisible): back, forward, reload and home on the left;
+              bookmark, mute and zoom on the right. All act on whichever tab is selected, so every
+              binding here is explicitly OneWay: SelectedTab changes as the user switches tabs,
+              unlike BrowserTabPage's own ViewModel, which is fixed to one tab for that page's
+              whole lifetime. Mute and zoom only take room while they apply.  -->
         <Grid
           Grid.Row="1"
-          Margin="8,4,8,0"
-          ColumnSpacing="2">
+          Margin="8,0,8,0"
+          ColumnSpacing="0">
           <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
@@ -279,22 +288,56 @@
             AutomationProperties.Name="Back"
             Command="{x:Bind ViewModel.SelectedTab.GoBackCommand, Mode=OneWay}"
             Content="&#xE72B;"
-            Style="{StaticResource ToolbarIconButtonStyle}"
+            Style="{StaticResource SidebarIconButtonStyle}"
             ToolTipService.ToolTip="Back (Alt+Left)" />
           <Button
             Grid.Column="1"
             AutomationProperties.Name="Forward"
             Command="{x:Bind ViewModel.SelectedTab.GoForwardCommand, Mode=OneWay}"
             Content="&#xE72A;"
-            Style="{StaticResource ToolbarIconButtonStyle}"
+            Style="{StaticResource SidebarIconButtonStyle}"
             ToolTipService.ToolTip="Forward (Alt+Right)" />
           <Button
             Grid.Column="2"
             AutomationProperties.Name="Reload"
             Command="{x:Bind ViewModel.SelectedTab.ReloadOrStopCommand, Mode=OneWay}"
             Content="{x:Bind ViewModel.SelectedTab.ReloadGlyph, Mode=OneWay}"
-            Style="{StaticResource ToolbarIconButtonStyle}"
+            Style="{StaticResource SidebarIconButtonStyle}"
             ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.ReloadTooltip, Mode=OneWay}" />
+          <Button
+            Grid.Column="3"
+            AutomationProperties.Name="Home"
+            Command="{x:Bind ViewModel.SelectedTab.GoHomeCommand, Mode=OneWay}"
+            Content="&#xE80F;"
+            Style="{StaticResource SidebarIconButtonStyle}"
+            ToolTipService.ToolTip="Home (Alt+Home)" />
+
+          <Button
+            Grid.Column="5"
+            AutomationProperties.Name="Zoom level"
+            Command="{x:Bind ViewModel.SelectedTab.ResetZoomCommand, Mode=OneWay}"
+            Content="{x:Bind ViewModel.SelectedTab.ZoomLabel, Mode=OneWay}"
+            FontFamily="{ThemeResource ContentControlThemeFontFamily}"
+            FontSize="12"
+            Style="{StaticResource SidebarIconButtonStyle}"
+            ToolTipService.ToolTip="Reset zoom to 100% (Ctrl+0)"
+            Visibility="{x:Bind local:MainWindow.Show(ViewModel.SelectedTab.IsZoomed), Mode=OneWay}"
+            Width="44" />
+          <Button
+            Grid.Column="6"
+            AutomationProperties.Name="{x:Bind ViewModel.SelectedTab.MuteTooltip, Mode=OneWay}"
+            Command="{x:Bind ViewModel.SelectedTab.ToggleMuteCommand, Mode=OneWay}"
+            Content="{x:Bind ViewModel.SelectedTab.MuteGlyph, Mode=OneWay}"
+            Style="{StaticResource SidebarIconButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.MuteTooltip, Mode=OneWay}"
+            Visibility="{x:Bind local:MainWindow.Show(ViewModel.SelectedTab.IsAudioPlaying), Mode=OneWay}" />
+          <Button
+            Grid.Column="7"
+            AutomationProperties.Name="{x:Bind ViewModel.SelectedTab.BookmarkTooltip, Mode=OneWay}"
+            Command="{x:Bind ViewModel.SelectedTab.ToggleBookmarkCommand, Mode=OneWay}"
+            Content="{x:Bind ViewModel.SelectedTab.BookmarkGlyph, Mode=OneWay}"
+            Style="{StaticResource SidebarIconButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind ViewModel.SelectedTab.BookmarkTooltip, Mode=OneWay}" />
         </Grid>
 
         <AutoSuggestBox
@@ -336,18 +379,26 @@
           </AutoSuggestBox.ItemTemplate>
         </AutoSuggestBox>
 
+        <!--  Same 36px row height and icon column as a tab, so it lines up with the list below.  -->
         <Button
           Grid.Row="3"
-          Margin="8,2,8,6"
+          Height="36"
+          Margin="8,2,8,4"
+          Padding="10,0"
           HorizontalAlignment="Stretch"
           HorizontalContentAlignment="Left"
           Background="Transparent"
           BorderThickness="0"
           Command="{x:Bind ViewModel.AddTabCommand}"
+          CornerRadius="8"
           ToolTipService.ToolTip="New tab (Ctrl+T)">
           <StackPanel Orientation="Horizontal" Spacing="10">
-            <FontIcon FontSize="14" Glyph="&#xE710;" Opacity="0.85" />
-            <TextBlock Text="New tab" />
+            <FontIcon
+              Width="16"
+              FontSize="14"
+              Glyph="&#xE710;"
+              Opacity="0.85" />
+            <TextBlock Text="New tab" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
 
@@ -418,17 +469,30 @@
                   </MenuFlyout>
                 </Grid.ContextFlyout>
 
-                <!--  A ring round the favicon while the tab loads: the sidebar's stand-in for the
-                      progress bar the page no longer has above it in this mode. IsActive rather
-                      than Visibility, so it needs no converter (x:Bind cannot use one anywhere in
-                      a Window) and an idle ring is not animating anything.  -->
+                <!--
+                  A 20px slot holding a 16px icon, with a ring round it while the tab loads: the
+                  sidebar's stand-in for the progress bar the page no longer has above it in this
+                  mode. The favicon is an Image pinned to 16x16 with Stretch=Uniform rather than an
+                  IconSourceElement - that one hands an ImageIconSource its bitmap's natural size,
+                  so a 32px or 64px favicon spilled out of the row. Tabs without a favicon (and the
+                  native pages) get a FontIcon instead; the view model says which via ShowsFavicon.
+                  IsActive on the ring rather than Visibility, so an idle ring animates nothing.
+                -->
                 <Grid Width="20" Height="20" VerticalAlignment="Center">
-                  <IconSourceElement
+                  <Image
                     Width="16"
                     Height="16"
                     HorizontalAlignment="Center"
-                    IconSource="{x:Bind TabIcon, Mode=OneWay}"
-                    VerticalAlignment="Center" />
+                    Source="{x:Bind FaviconImage, Mode=OneWay}"
+                    Stretch="Uniform"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind local:MainWindow.Show(ShowsFavicon), Mode=OneWay}" />
+                  <FontIcon
+                    FontSize="14"
+                    Glyph="{x:Bind IconGlyph, Mode=OneWay}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Visibility="{x:Bind local:MainWindow.Hide(ShowsFavicon), Mode=OneWay}" />
                   <ProgressRing
                     Width="20"
                     Height="20"
@@ -444,14 +508,202 @@
                   VerticalAlignment="Center" />
                 <Button
                   Grid.Column="2"
+                  AutomationProperties.Name="Close tab"
                   Command="{x:Bind CloseCommand}"
                   Content="&#xE711;"
-                  Style="{StaticResource ToolbarIconButtonStyle}"
+                  Style="{StaticResource SidebarTabCloseButtonStyle}"
                   ToolTipService.ToolTip="Close tab" />
               </Grid>
             </DataTemplate>
           </ListView.ItemTemplate>
         </ListView>
+
+        <!--
+          Footer: downloads bottom-left, the menu bottom-right - the two things the horizontal
+          toolbar keeps at its far end. Both open upward and rightward so they land over the page
+          rather than off the bottom or left of the window. Their flyouts are popups of their own,
+          which MainWindow.HasOpenPaneMenu already counts, so an auto-hidden pane stays out while
+          either is open.
+        -->
+        <Border
+          Grid.Row="5"
+          Padding="8,6"
+          BorderBrush="{ThemeResource WinserChromeBorderBrush}"
+          BorderThickness="0,1,0,0">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+              <Button
+                AutomationProperties.Name="Downloads"
+                Content="&#xE896;"
+                Style="{StaticResource SidebarIconButtonStyle}"
+                ToolTipService.ToolTip="Downloads (Ctrl+J)">
+                <Button.Flyout>
+                  <Flyout Placement="TopEdgeAlignedLeft">
+                    <StackPanel Width="340" Spacing="8">
+                      <Grid>
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Downloads" />
+                        <HyperlinkButton
+                          Padding="4,0"
+                          Command="{x:Bind ViewModel.OpenDownloadsCommand}"
+                          Content="See all"
+                          HorizontalAlignment="Right" />
+                      </Grid>
+                      <TextBlock
+                        Opacity="0.6"
+                        Text="Nothing downloaded yet."
+                        Visibility="{x:Bind local:MainWindow.ShowIfEmpty(ViewModel.Downloads.Items.Count), Mode=OneWay}" />
+                      <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Downloads.Items, Mode=OneWay}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DownloadItem">
+                              <Grid Padding="0,6" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                  <ColumnDefinition Width="*" />
+                                  <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                  <TextBlock Text="{x:Bind FileName}" TextTrimming="CharacterEllipsis" />
+                                  <ProgressBar
+                                    Maximum="100"
+                                    IsIndeterminate="{x:Bind IsIndeterminate, Mode=OneWay}"
+                                    Value="{x:Bind ProgressPercent, Mode=OneWay}"
+                                    Visibility="{x:Bind local:MainWindow.Show(IsInProgress), Mode=OneWay}" />
+                                  <TextBlock
+                                    Opacity="0.6"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind StatusText, Mode=OneWay}" />
+                                </StackPanel>
+                                <Button
+                                  Grid.Column="1"
+                                  AutomationProperties.Name="Open file"
+                                  Command="{x:Bind OpenCommand}"
+                                  Content="&#xE8E5;"
+                                  Style="{StaticResource SidebarIconButtonStyle}"
+                                  ToolTipService.ToolTip="Open file"
+                                  VerticalAlignment="Top" />
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </ScrollViewer>
+                    </StackPanel>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+              <!--  The dot that says a download is in flight, as on the horizontal toolbar.  -->
+              <Ellipse
+                Width="7"
+                Height="7"
+                Margin="0,5,4,0"
+                Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                HorizontalAlignment="Right"
+                IsHitTestVisible="False"
+                VerticalAlignment="Top"
+                Visibility="{x:Bind local:MainWindow.Show(ViewModel.HasActiveDownloads), Mode=OneWay}" />
+            </Grid>
+
+            <Button
+              Grid.Column="2"
+              AutomationProperties.Name="Settings and more"
+              Content="&#xE712;"
+              Style="{StaticResource SidebarIconButtonStyle}"
+              ToolTipService.ToolTip="Settings and more">
+              <Button.Flyout>
+                <MenuFlyout Placement="TopEdgeAlignedLeft">
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.AddTabCommand}"
+                    KeyboardAcceleratorTextOverride="Ctrl+T"
+                    Text="New tab">
+                    <MenuFlyoutItem.Icon>
+                      <FontIcon Glyph="&#xE710;" />
+                    </MenuFlyoutItem.Icon>
+                  </MenuFlyoutItem>
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.NewWindowCommand}"
+                    KeyboardAcceleratorTextOverride="Ctrl+N"
+                    Text="New window" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.NewPrivateWindowCommand}"
+                    KeyboardAcceleratorTextOverride="Ctrl+Shift+N"
+                    Text="New InPrivate window">
+                    <MenuFlyoutItem.Icon>
+                      <FontIcon Glyph="&#xE727;" />
+                    </MenuFlyoutItem.Icon>
+                  </MenuFlyoutItem>
+
+                  <MenuFlyoutSeparator />
+
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.ZoomInCommand, Mode=OneWay}"
+                    KeyboardAcceleratorTextOverride="Ctrl++"
+                    Text="Zoom in" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.ZoomOutCommand, Mode=OneWay}"
+                    KeyboardAcceleratorTextOverride="Ctrl+-"
+                    Text="Zoom out" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.ResetZoomCommand, Mode=OneWay}"
+                    Text="{x:Bind ViewModel.SelectedTab.ZoomLabel, Mode=OneWay}" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.ToggleFullScreenCommand}"
+                    KeyboardAcceleratorTextOverride="F11"
+                    Text="Full screen" />
+
+                  <MenuFlyoutSeparator />
+
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.OpenFindCommand, Mode=OneWay}"
+                    KeyboardAcceleratorTextOverride="Ctrl+F"
+                    Text="Find on page" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.PrintCommand, Mode=OneWay}"
+                    KeyboardAcceleratorTextOverride="Ctrl+P"
+                    Text="Print" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.CopyLinkCommand, Mode=OneWay}"
+                    Text="Copy page address" />
+
+                  <MenuFlyoutSeparator />
+
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.OpenBookmarksCommand}"
+                    KeyboardAcceleratorTextOverride="Ctrl+Shift+O"
+                    Text="Bookmarks" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.OpenHistoryCommand}"
+                    KeyboardAcceleratorTextOverride="Ctrl+H"
+                    Text="History" />
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.OpenDownloadsCommand}"
+                    KeyboardAcceleratorTextOverride="Ctrl+J"
+                    Text="Downloads" />
+
+                  <MenuFlyoutSeparator />
+
+                  <MenuFlyoutItem
+                    Command="{x:Bind ViewModel.SelectedTab.OpenDevToolsCommand, Mode=OneWay}"
+                    KeyboardAcceleratorTextOverride="F12"
+                    Text="Developer tools" />
+                  <MenuFlyoutItem Command="{x:Bind ViewModel.OpenSettingsCommand}" Text="Settings">
+                    <MenuFlyoutItem.Icon>
+                      <FontIcon Glyph="&#xE713;" />
+                    </MenuFlyoutItem.Icon>
+                  </MenuFlyoutItem>
+
+                  <MenuFlyoutSeparator />
+
+                  <MenuFlyoutItem Command="{x:Bind ViewModel.CloseWindowCommand}" Text="Close window" />
+                </MenuFlyout>
+              </Button.Flyout>
+            </Button>
+          </Grid>
+        </Border>
       </Grid>
       </Border>
       </Grid>
