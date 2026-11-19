@@ -524,6 +524,18 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// part of the now-visible band above that row, no matter the margin used.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// The strip is slid, never collapsed - that distinction is load-bearing. TabView picks the
+    /// page to show by looking up the selected item's realized TabViewItem container
+    /// (TabView::UpdateTabContent -> ContainerFromItem), and a collapsed strip never realizes
+    /// containers. Collapsing TabContainerGrid here - which this did briefly - therefore left the
+    /// content presenter with no content at all whenever the selected tab had not been realized
+    /// yet: a startup that restores a session (tabs and selection set before the window is shown)
+    /// came up completely blank, with neither the restored page nor winser://settings in it, and
+    /// no later event ever re-ran UpdateTabContent to repair it. Sliding keeps the strip arranged,
+    /// so containers are realized and the page is always provisioned.
+    /// </para>
+    /// <para>
     /// The left margin is the docked sidebar: pinned, the pane sits in a column of window
     /// background beside the page instead of covering its left edge, the way Arc's and Zen's do.
     /// Unpinned, the page takes the full width and the pane slides in over it on demand. The
@@ -533,12 +545,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void UpdatePageInset()
     {
         var hideStrip = ViewModel.IsFullScreen || ViewModel.UseVerticalTabs;
-
-        // Preferably the strip is collapsed outright, so there is no tab row anywhere - not
-        // above the window, not behind the page. Only when TabView's template cannot be found
-        // (or has not loaded yet) does it fall back to sliding the strip off the top.
-        var stripCollapsed = SetTabStripCollapsed(hideStrip);
-        var top = hideStrip && !stripCollapsed ? -PageTopInStrip : 0;
+        var top = hideStrip ? -PageTopInStrip : 0;
 
         // The caption bar in vertical tabs mode takes its own row while it is out, pushing the
         // page down, rather than being drawn over the top of the site.
@@ -549,29 +556,6 @@ public sealed partial class MainWindow : Window, IShellWindow
 
         var left = IsVerticalTabsDocked ? VerticalTabsPaneWidth + (VerticalTabsPaneMargin * 2) : 0;
         TabStrip.Margin = new Thickness(left, top, 0, 0);
-    }
-
-    /// <summary>
-    /// Collapses or restores the row of tabs inside TabView - the header, the tabs themselves,
-    /// the add button and the footer - leaving just the content presenter, so the page fills the
-    /// whole control. Returns whether the strip is now collapsed, which is false when the part
-    /// cannot be found: before the template has loaded, or if a future TabView renames it.
-    /// </summary>
-    private bool SetTabStripCollapsed(bool collapsed)
-    {
-        if (TabStrip.FindDescendantByName("TabContainerGrid") is not { } container)
-        {
-            return false;
-        }
-
-        var visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        if (container.Visibility != visibility)
-        {
-            container.Visibility = visibility;
-            DiagnosticLog.Write($"chrome: tab strip {(collapsed ? "collapsed" : "restored")}");
-        }
-
-        return collapsed;
     }
 
     /// <summary>
